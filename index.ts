@@ -27,14 +27,19 @@ export default function statsDashboard(pi: ExtensionAPI): void {
   pi.registerCommand("stats", {
     description: "Open the local statistics dashboard",
     handler: async (_args, ctx) => {
-      const sessionsDirectory = resolveSessionsDirectory(
-        ctx.sessionManager.getSessionDir(),
-        ctx.cwd
-      )
-      server ??= new StatsServer({ sessionsDirectory })
-      const url = await server.start()
-      await open(url)
-      ctx.ui.notify("Statistics dashboard opened in your browser.", "info")
+      ctx.ui.setStatus("stats", "Opening statistics dashboard…")
+      try {
+        const sessionsDirectory = resolveSessionsDirectory(
+          ctx.sessionManager.getSessionDir(),
+          ctx.cwd
+        )
+        server ??= new StatsServer({ sessionsDirectory })
+        const url = await server.start()
+        await open(url)
+        ctx.ui.notify("Statistics dashboard opened in your browser.", "info")
+      } finally {
+        ctx.ui.setStatus("stats", undefined)
+      }
     },
   })
 
