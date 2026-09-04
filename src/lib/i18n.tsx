@@ -83,8 +83,16 @@ const english = {
   costEstimate:
     "Estimate based on model catalog rates, excluding subscription.",
   costBySession: "API equivalent by session",
+  averageRequestsPerSession: "Requests per session",
+  averageTokensPerSession: "Tokens per session",
+  averageCostPerSession: "Cost per session",
   sessionCostDetails:
     "Sessions over the selected period. Select a column to sort.",
+  activeModels: "Active models",
+  providerCount: (value: string, count: number) =>
+    `${value} ${count === 1 ? "provider" : "providers"}`,
+  topTokens: "Top tokens",
+  topCost: "Highest cost",
   modelDetails: "Consumption, cache, and cost by model.",
   hideModel: (model: string) => `Hide ${model}`,
   confirmHideModel: (model: string, provider: string) =>
@@ -93,7 +101,14 @@ const english = {
   showModel: (model: string) => `Show ${model}`,
   showModelFailed: "Could not show the model.",
   hiddenFromStats: "Hidden from global statistics",
+  activeTools: "Active tools",
+  averageCallsPerTool: (value: string) => `${value} calls on average per tool`,
+  topTool: "Top tool",
+  errorCount: (value: string, count: number) =>
+    `${value} ${count === 1 ? "error" : "errors"}`,
   toolDetails: "Calls observed in sessions and their results.",
+  activeSkills: "Active skills",
+  topSkill: "Top skill",
   skillDetails: "Actual SKILL.md file reads, deduplicated by session.",
   noRequests: "No requests",
   noSessions: "No sessions",
@@ -212,8 +227,15 @@ const french: Messages = {
   costEstimate:
     "Estimation fondée sur les tarifs catalogue des modèles, hors abonnement.",
   costBySession: "Équivalent API par session",
+  averageRequestsPerSession: "Requêtes par session",
+  averageTokensPerSession: "Tokens par session",
+  averageCostPerSession: "Coût par session",
   sessionCostDetails:
     "Sessions sur la période sélectionnée. Sélectionnez une colonne pour trier.",
+  activeModels: "Modèles actifs",
+  providerCount: (value, count) => `${value} provider${count === 1 ? "" : "s"}`,
+  topTokens: "Top tokens",
+  topCost: "Coût maximal",
   modelDetails: "Consommation, cache et coût par modèle.",
   hideModel: (model) => `Masquer ${model}`,
   confirmHideModel: (model, provider) =>
@@ -222,7 +244,13 @@ const french: Messages = {
   showModel: (model) => `Réafficher ${model}`,
   showModelFailed: "Impossible de réafficher le modèle.",
   hiddenFromStats: "Masqué des statistiques globales",
+  activeTools: "Outils actifs",
+  averageCallsPerTool: (value) => `${value} appels en moyenne par outil`,
+  topTool: "Outil principal",
+  errorCount: (value, count) => `${value} erreur${count === 1 ? "" : "s"}`,
   toolDetails: "Appels observés dans les sessions et résultats associés.",
+  activeSkills: "Skills actifs",
+  topSkill: "Skill principal",
   skillDetails:
     "Consultations réelles de fichiers SKILL.md, dédupliquées par session.",
   noRequests: "Aucune requête",

@@ -3,6 +3,8 @@ import {
   ActivityIcon,
   AlertTriangleIcon,
   ArrowRightIcon,
+  BookOpenIcon,
+  BoxIcon,
   Clock3Icon,
   CoinsIcon,
   DatabaseIcon,
@@ -10,6 +12,7 @@ import {
   RotateCwIcon,
   SparklesIcon,
   TerminalSquareIcon,
+  WrenchIcon,
   ZapIcon,
 } from "lucide-react"
 import {
@@ -239,6 +242,39 @@ export function App() {
   const peakCostDay = activeCostDays.reduce<
     (typeof activeCostDays)[number] | null
   >((peak, point) => (!peak || point.cost > peak.cost ? point : peak), null)
+  const sessionCount = sessionsData?.total ?? 0
+  const averagePerSession = (value: number) =>
+    sessionCount > 0 ? value / sessionCount : 0
+  const activeModelProviders = new Set(
+    data?.models.map((model) => model.provider)
+  ).size
+  const topTokenModel = data?.models.toSorted(
+    (left, right) => right.tokens - left.tokens
+  )[0]
+  const topCostModel = data?.models.toSorted(
+    (left, right) => right.cost - left.cost
+  )[0]
+  const topTokenShare =
+    topTokenModel && data?.overview.totalTokens
+      ? topTokenModel.tokens / data.overview.totalTokens
+      : 0
+  const toolCalls =
+    data?.tools.reduce((total, tool) => total + tool.calls, 0) ?? 0
+  const toolErrors =
+    data?.tools.reduce((total, tool) => total + tool.errors, 0) ?? 0
+  const topTool = data?.tools.toSorted(
+    (left, right) => right.calls - left.calls
+  )[0]
+  const topToolShare = topTool && toolCalls ? topTool.calls / toolCalls : 0
+  const skillUses =
+    data?.skills.reduce((total, skill) => total + skill.uses, 0) ?? 0
+  const topSkill = data?.skills.toSorted(
+    (left, right) => right.uses - left.uses
+  )[0]
+  const topSkillShare = topSkill && skillUses ? topSkill.uses / skillUses : 0
+  const lastUsedSkill = data?.skills.toSorted((left, right) =>
+    right.lastUsed.localeCompare(left.lastUsed)
+  )[0]
 
   const updateFilter = <Key extends keyof StatsFilters>(
     key: Key,
@@ -701,85 +737,228 @@ export function App() {
               <Route
                 path={dashboardPaths.sessions}
                 element={
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>{t.costBySession}</CardTitle>
-                      <CardDescription>{t.sessionCostDetails}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="overflow-x-auto">
-                      {sessionsData ? (
-                        <SessionsTable
-                          rows={sessionsData.rows}
-                          total={sessionsData.total}
-                          page={sessionsData.page}
-                          pageSize={sessionsData.pageSize}
-                          sort={sessionPage.sort}
-                          direction={sessionPage.direction}
-                          isLoading={isSessionsLoading}
-                          onPageChange={(page) =>
-                            setSearchParams((current) =>
-                              withSessionPage(current, { page })
-                            )
-                          }
-                          onSortChange={updateSessionSort}
+                  <div className="flex flex-col gap-4">
+                    {sessionsData ? (
+                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                        <MetricCard
+                          label={t.sessions}
+                          value={format.number(sessionCount)}
+                          detail={rangeLabels[filters.range]}
+                          icon={BoxIcon}
                         />
-                      ) : (
-                        <Skeleton className="h-56 w-full" />
-                      )}
-                    </CardContent>
-                  </Card>
+                        <MetricCard
+                          label={t.averageRequestsPerSession}
+                          value={format.number(
+                            averagePerSession(data.overview.requests)
+                          )}
+                          detail={t.requestCount(
+                            format.compact(data.overview.requests),
+                            data.overview.requests
+                          )}
+                          icon={ActivityIcon}
+                        />
+                        <MetricCard
+                          label={t.averageTokensPerSession}
+                          value={format.compact(
+                            averagePerSession(data.overview.totalTokens)
+                          )}
+                          detail={t.tokenCount(
+                            format.compact(data.overview.totalTokens),
+                            data.overview.totalTokens
+                          )}
+                          icon={SparklesIcon}
+                        />
+                        <MetricCard
+                          label={t.averageCostPerSession}
+                          value={format.currency(
+                            averagePerSession(data.overview.cost)
+                          )}
+                          detail={`${format.currency(data.overview.cost)} · ${t.apiEquivalent}`}
+                          icon={CoinsIcon}
+                        />
+                      </div>
+                    ) : null}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>{t.costBySession}</CardTitle>
+                        <CardDescription>
+                          {t.sessionCostDetails}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="overflow-x-auto">
+                        {sessionsData ? (
+                          <SessionsTable
+                            rows={sessionsData.rows}
+                            total={sessionsData.total}
+                            page={sessionsData.page}
+                            pageSize={sessionsData.pageSize}
+                            sort={sessionPage.sort}
+                            direction={sessionPage.direction}
+                            isLoading={isSessionsLoading}
+                            onPageChange={(page) =>
+                              setSearchParams((current) =>
+                                withSessionPage(current, { page })
+                              )
+                            }
+                            onSortChange={updateSessionSort}
+                          />
+                        ) : (
+                          <Skeleton className="h-56 w-full" />
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
                 }
               />
 
               <Route
                 path={dashboardPaths.models}
                 element={
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>{t.models}</CardTitle>
-                      <CardDescription>{t.modelDetails}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="overflow-x-auto">
-                      <ModelsTable
-                        rows={data.models}
-                        hiddenRows={data.hiddenModels}
-                        hidingModel={hidingModel}
-                        showingModel={showingModel}
-                        onHide={handleHideModel}
-                        onShow={showModel}
+                  <div className="flex flex-col gap-4">
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                      <MetricCard
+                        label={t.activeModels}
+                        value={format.number(data.models.length)}
+                        detail={t.providerCount(
+                          format.number(activeModelProviders),
+                          activeModelProviders
+                        )}
+                        icon={BoxIcon}
                       />
-                    </CardContent>
-                  </Card>
+                      <MetricCard
+                        label={t.topTokens}
+                        value={format.percent(topTokenShare)}
+                        detail={topTokenModel?.model ?? t.noActivity}
+                        icon={SparklesIcon}
+                      />
+                      <MetricCard
+                        label={t.topCost}
+                        value={format.currency(topCostModel?.cost ?? 0)}
+                        detail={topCostModel?.model ?? t.noActivity}
+                        icon={CoinsIcon}
+                      />
+                      <MetricCard
+                        label={t.cache}
+                        value={format.percent(data.overview.cacheRate)}
+                        detail={t.tokensRead(
+                          format.compact(data.overview.cacheReadTokens),
+                          data.overview.cacheReadTokens
+                        )}
+                        icon={DatabaseIcon}
+                      />
+                    </div>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>{t.models}</CardTitle>
+                        <CardDescription>{t.modelDetails}</CardDescription>
+                      </CardHeader>
+                      <CardContent className="overflow-x-auto">
+                        <ModelsTable
+                          rows={data.models}
+                          hiddenRows={data.hiddenModels}
+                          hidingModel={hidingModel}
+                          showingModel={showingModel}
+                          onHide={handleHideModel}
+                          onShow={showModel}
+                        />
+                      </CardContent>
+                    </Card>
+                  </div>
                 }
               />
 
               <Route
                 path={dashboardPaths.tools}
                 element={
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>{t.tools}</CardTitle>
-                      <CardDescription>{t.toolDetails}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="overflow-x-auto">
-                      <ToolsTable rows={data.tools} />
-                    </CardContent>
-                  </Card>
+                  <div className="flex flex-col gap-4">
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                      <MetricCard
+                        label={t.activeTools}
+                        value={format.number(data.tools.length)}
+                        detail={rangeLabels[filters.range]}
+                        icon={WrenchIcon}
+                      />
+                      <MetricCard
+                        label={t.calls}
+                        value={format.compact(toolCalls)}
+                        detail={t.averageCallsPerTool(
+                          format.number(
+                            toolCalls / Math.max(data.tools.length, 1)
+                          )
+                        )}
+                        icon={ActivityIcon}
+                      />
+                      <MetricCard
+                        label={t.topTool}
+                        value={format.percent(topToolShare)}
+                        detail={topTool?.name ?? t.noActivity}
+                        icon={ZapIcon}
+                      />
+                      <MetricCard
+                        label={t.errorRate}
+                        value={format.percent(
+                          toolCalls > 0 ? toolErrors / toolCalls : 0
+                        )}
+                        detail={t.errorCount(
+                          format.number(toolErrors),
+                          toolErrors
+                        )}
+                        icon={AlertTriangleIcon}
+                      />
+                    </div>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>{t.tools}</CardTitle>
+                        <CardDescription>{t.toolDetails}</CardDescription>
+                      </CardHeader>
+                      <CardContent className="overflow-x-auto">
+                        <ToolsTable rows={data.tools} />
+                      </CardContent>
+                    </Card>
+                  </div>
                 }
               />
 
               <Route
                 path={dashboardPaths.skills}
                 element={
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>{t.mostUsedSkills}</CardTitle>
-                      <CardDescription>{t.skillDetails}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="overflow-x-auto">
-                      <SkillsTable rows={data.skills} />
-                    </CardContent>
-                  </Card>
+                  <div className="flex flex-col gap-4">
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                      <MetricCard
+                        label={t.activeSkills}
+                        value={format.number(data.skills.length)}
+                        detail={rangeLabels[filters.range]}
+                        icon={BookOpenIcon}
+                      />
+                      <MetricCard
+                        label={t.uses}
+                        value={format.compact(skillUses)}
+                        detail={t.skillUsageRule}
+                        icon={ActivityIcon}
+                      />
+                      <MetricCard
+                        label={t.topSkill}
+                        value={format.percent(topSkillShare)}
+                        detail={topSkill?.name ?? t.noActivity}
+                        icon={ZapIcon}
+                      />
+                      <MetricCard
+                        label={t.lastUsed}
+                        value={format.dateTime(lastUsedSkill?.lastUsed ?? "")}
+                        detail={lastUsedSkill?.name ?? t.noActivity}
+                        icon={Clock3Icon}
+                      />
+                    </div>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>{t.mostUsedSkills}</CardTitle>
+                        <CardDescription>{t.skillDetails}</CardDescription>
+                      </CardHeader>
+                      <CardContent className="overflow-x-auto">
+                        <SkillsTable rows={data.skills} />
+                      </CardContent>
+                    </Card>
+                  </div>
                 }
               />
             </Routes>
