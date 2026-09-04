@@ -4,6 +4,8 @@ A private, local dashboard for understanding your [Pi](https://github.com/earend
 
 Run `/stats` from Pi to explore activity, token usage, API-equivalent costs, models, tools, and skills in your browser.
 
+![Pi Local Stats dashboard](https://raw.githubusercontent.com/TellyD/pi-local-stats/main/assets/dashboard.png)
+
 ## Requirements
 
 - [Pi](https://github.com/earendil-works/pi) 0.84.1 or newer

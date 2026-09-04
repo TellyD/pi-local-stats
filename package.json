@@ -36,7 +36,8 @@
   "pi": {
     "extensions": [
       "./index.ts"
-    ]
+    ],
+    "image": "https://raw.githubusercontent.com/TellyD/pi-local-stats/main/assets/dashboard.png"
   },
   "scripts": {
     "build": "tsc -b && vite build",
