@@ -1,0 +1,23 @@
+{
+  "lifecycleArtifactVersion": 3,
+  "runId": "fixture-run",
+  "sessionId": "fixture-parent",
+  "mode": "parallel",
+  "state": "complete",
+  "startedAt": 1767225600000,
+  "endedAt": 1767225602000,
+  "steps": [
+    {
+      "index": 0,
+      "childId": "fixture-child",
+      "agent": "reviewer",
+      "status": "complete",
+      "model": "openai/gpt-fixture",
+      "startedAt": 1767225600000,
+      "endedAt": 1767225601000,
+      "tokens": { "input": 40, "output": 10, "total": 50 },
+      "totalCost": { "inputTokens": 40, "outputTokens": 10, "costUsd": 0.03 }
+    }
+  ],
+  "futureField": { "mustBeIgnored": true }
+}

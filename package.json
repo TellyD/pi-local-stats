@@ -1,0 +1,85 @@
+{
+  "name": "pi-local-stats",
+  "version": "0.0.1",
+  "description": "Local usage statistics dashboard for the Earendil Pi coding agent",
+  "license": "MIT",
+  "author": "TellyD",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TellyD/pi-local-stats.git"
+  },
+  "homepage": "https://github.com/TellyD/pi-local-stats#readme",
+  "bugs": {
+    "url": "https://github.com/TellyD/pi-local-stats/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "statistics",
+    "dashboard"
+  ],
+  "files": [
+    "dist/client",
+    "index.ts",
+    "server",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "scripts": {
+    "build": "tsc -b && vite build",
+    "prepack": "npm run build",
+    "lint": "eslint .",
+    "format": "prettier --write \"**/*.{ts,tsx}\"",
+    "typecheck": "tsc -b",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "open": "^11.0.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@base-ui/react": "^1.7.0",
+    "@earendil-works/pi-coding-agent": "^0.84.1",
+    "@eslint/js": "^10",
+    "@fontsource-variable/geist": "^5.3.0",
+    "@tailwindcss/vite": "^4",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6",
+    "eslint": "^10",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17",
+    "lucide-react": "^1.31.0",
+    "prettier": "^3.8.3",
+    "prettier-plugin-tailwindcss": "^0.8.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-router": "^7.18.3",
+    "recharts": "^3.8.0",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4",
+    "typescript": "~6",
+    "typescript-eslint": "^8",
+    "vite": "^8",
+    "vitest": "^4.1.10"
+  }
+}

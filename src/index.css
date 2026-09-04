@@ -1,0 +1,145 @@
+@import "tailwindcss";
+@import "@fontsource-variable/geist";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: "Geist Variable", sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+}
+
+:root {
+  --background: #f4f4f6;
+  --foreground: #1c1e22;
+  --card: #ffffff;
+  --card-foreground: #1c1e22;
+  --primary: #806a08;
+  --primary-foreground: #ffffff;
+  --secondary: #e8eaed;
+  --secondary-foreground: #2a2d32;
+  --muted: #e8eaed;
+  --muted-foreground: #5c6270;
+  --destructive: #a94747;
+  --border: #c0c4ca;
+  --input: #c0c4ca;
+  --ring: #806a08;
+  --chart-1: #806a08;
+  --chart-3: #92714f;
+  --radius: 0.5rem;
+}
+
+.dark {
+  --background: #1c1e22;
+  --foreground: #e8eaed;
+  --card: #22242a;
+  --card-foreground: #e8eaed;
+  --primary: #f0d050;
+  --primary-foreground: #1c1e22;
+  --secondary: #2a2d32;
+  --secondary-foreground: #e8eaed;
+  --muted: #2a2d32;
+  --muted-foreground: #9098a8;
+  --destructive: #d88989;
+  --border: #404550;
+  --input: #404550;
+  --ring: #f0d050;
+  --chart-1: #f0d050;
+  --chart-3: #d4b896;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply font-sans;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    min-width: 320px;
+  }
+
+  button,
+  [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  ::selection {
+    background: color-mix(in oklch, var(--primary) 35%, transparent);
+    color: var(--foreground);
+  }
+}
+
+.trace-grid {
+  position: relative;
+  background-image:
+    linear-gradient(
+      to right,
+      color-mix(in oklch, var(--border) 55%, transparent) 1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      color-mix(in oklch, var(--border) 45%, transparent) 1px,
+      transparent 1px
+    ),
+    radial-gradient(
+      circle at 18% 0%,
+      color-mix(in oklch, var(--primary) 14%, transparent),
+      transparent 34rem
+    );
+  background-size:
+    40px 40px,
+    40px 40px,
+    100% 100%;
+}
+
+.trace-grid::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--primary) 18%,
+    color-mix(in oklch, var(--border) 65%, transparent) 54%,
+    transparent 100%
+  );
+  content: "";
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

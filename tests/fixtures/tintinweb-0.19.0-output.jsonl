@@ -1,0 +1,2 @@
+{"isSidechain":true,"agentId":"fixture-agent","type":"user","timestamp":"2026-01-01T00:00:01.000Z","cwd":"/fixture/project","message":{"role":"user","content":"[redacted]"}}
+{"isSidechain":true,"agentId":"fixture-agent","type":"assistant","timestamp":"2026-01-01T00:00:02.000Z","cwd":"/fixture/project","message":{"role":"assistant","responseId":"fixture-response","provider":"openai-codex","model":"gpt-fixture","content":[],"usage":{"input":40,"output":10,"cacheRead":20,"cacheWrite":0,"totalTokens":70,"cost":{"total":0.03}}}}
