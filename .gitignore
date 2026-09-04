@@ -30,3 +30,4 @@ AGENTS.md
 *.njsproj
 *.sln
 *.sw?
+.pi/skills/*
