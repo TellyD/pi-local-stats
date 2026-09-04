@@ -1,6 +1,6 @@
 {
   "name": "pi-local-stats",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Local usage statistics dashboard for the Earendil Pi coding agent",
   "license": "MIT",
   "author": "TellyD",
