@@ -208,14 +208,11 @@ export function SessionAgents({ row }: { row: SessionSummary }) {
               <code className="text-xs text-muted-foreground">
                 {agent.id.slice(0, 8)}
               </code>
+              <Badge variant="outline">{agent.statusRaw || agent.status}</Badge>
               <Badge
-                variant="outline"
+                variant="secondary"
                 title={agent.provenance.channels.join(", ")}
               >
-                {agent.source}
-              </Badge>
-              <Badge variant="outline">{agent.statusRaw || agent.status}</Badge>
-              <Badge variant="secondary">
                 {precisionLabel(agent.usage.coverage, agent.precision.tokens)}
               </Badge>
               {agent.models.map((model) => (

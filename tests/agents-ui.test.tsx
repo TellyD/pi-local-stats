@@ -126,7 +126,7 @@ describe("SessionAgents", () => {
     expect(markup).toContain("Unassigned agent usage")
     expect(markup).toContain("margin-left:16px")
     expect(markup).toContain("Worker")
-    expect(markup).toContain("tintinweb")
+    expect(markup).not.toContain("tintinweb")
     expect(markup).toContain('title="tool-details"')
     expect(markup).toContain("GPT 5 Terra")
     expect(markup).toContain("Partial")
