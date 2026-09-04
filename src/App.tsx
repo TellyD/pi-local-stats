@@ -1,22 +1,11 @@
 import { useEffect, useMemo } from "react"
 import {
-  ActivityIcon,
   AlertTriangleIcon,
-  ArrowRightIcon,
-  BookOpenIcon,
-  BoxIcon,
-  Clock3Icon,
-  CoinsIcon,
-  DatabaseIcon,
   RefreshCwIcon,
   RotateCwIcon,
-  SparklesIcon,
   TerminalSquareIcon,
-  WrenchIcon,
-  ZapIcon,
 } from "lucide-react"
 import {
-  Link,
   Navigate,
   Route,
   Routes,
@@ -24,27 +13,15 @@ import {
   useSearchParams,
 } from "react-router"
 
-import { ActivityChart } from "@/components/dashboard/ActivityChart"
-import { CostChart } from "@/components/dashboard/CostChart"
+import { CostsPage } from "@/components/dashboard/CostsPage"
 import { DashboardNavigation } from "@/components/dashboard/DashboardNavigation"
-import {
-  ModelsTable,
-  SessionsTable,
-  SkillsTable,
-  ToolsTable,
-} from "@/components/dashboard/DataPanels"
-import { MetricCard } from "@/components/dashboard/MetricCard"
-import { ModelChart } from "@/components/dashboard/ModelChart"
-import { Badge } from "@/components/ui/badge"
+import { ModelsPage } from "@/components/dashboard/ModelsPage"
+import { OverviewPage } from "@/components/dashboard/OverviewPage"
+import { SessionsPage } from "@/components/dashboard/SessionsPage"
+import { SkillsPage } from "@/components/dashboard/SkillsPage"
+import { ToolsPage } from "@/components/dashboard/ToolsPage"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import {
   Select,
   SelectContent,
@@ -232,50 +209,6 @@ export function App() {
     "90d": t.last90Days,
     all: t.allTime,
   }
-  const activeCostDays =
-    data?.timeseries.filter((point) => point.cost > 0) ?? []
-  const averageDailyCost =
-    activeCostDays.length > 0
-      ? activeCostDays.reduce((total, point) => total + point.cost, 0) /
-        activeCostDays.length
-      : 0
-  const peakCostDay = activeCostDays.reduce<
-    (typeof activeCostDays)[number] | null
-  >((peak, point) => (!peak || point.cost > peak.cost ? point : peak), null)
-  const sessionCount = sessionsData?.total ?? 0
-  const averagePerSession = (value: number) =>
-    sessionCount > 0 ? value / sessionCount : 0
-  const activeModelProviders = new Set(
-    data?.models.map((model) => model.provider)
-  ).size
-  const topTokenModel = data?.models.toSorted(
-    (left, right) => right.tokens - left.tokens
-  )[0]
-  const topCostModel = data?.models.toSorted(
-    (left, right) => right.cost - left.cost
-  )[0]
-  const topTokenShare =
-    topTokenModel && data?.overview.totalTokens
-      ? topTokenModel.tokens / data.overview.totalTokens
-      : 0
-  const toolCalls =
-    data?.tools.reduce((total, tool) => total + tool.calls, 0) ?? 0
-  const toolErrors =
-    data?.tools.reduce((total, tool) => total + tool.errors, 0) ?? 0
-  const topTool = data?.tools.toSorted(
-    (left, right) => right.calls - left.calls
-  )[0]
-  const topToolShare = topTool && toolCalls ? topTool.calls / toolCalls : 0
-  const skillUses =
-    data?.skills.reduce((total, skill) => total + skill.uses, 0) ?? 0
-  const topSkill = data?.skills.toSorted(
-    (left, right) => right.uses - left.uses
-  )[0]
-  const topSkillShare = topSkill && skillUses ? topSkill.uses / skillUses : 0
-  const lastUsedSkill = data?.skills.toSorted((left, right) =>
-    right.lastUsed.localeCompare(left.lastUsed)
-  )[0]
-
   const updateFilter = <Key extends keyof StatsFilters>(
     key: Key,
     value: StatsFilters[Key]
@@ -464,501 +397,68 @@ export function App() {
               <Route
                 path={dashboardPaths.overview}
                 element={
-                  <div className="flex flex-col gap-4">
-                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                      <MetricCard
-                        label={t.apiEquivalent}
-                        value={format.currency(data.overview.cost)}
-                        detail={t.perRequest(
-                          format.currency(
-                            data.overview.requests
-                              ? data.overview.cost / data.overview.requests
-                              : 0
-                          )
-                        )}
-                        icon={CoinsIcon}
-                      />
-                      <MetricCard
-                        label={t.tokens}
-                        value={format.compact(data.overview.totalTokens)}
-                        detail={t.requestCount(
-                          format.compact(data.overview.requests),
-                          data.overview.requests
-                        )}
-                        icon={SparklesIcon}
-                      />
-                      <MetricCard
-                        label={t.cache}
-                        value={format.percent(data.overview.cacheRate)}
-                        detail={t.tokensRead(
-                          format.compact(data.overview.cacheReadTokens),
-                          data.overview.cacheReadTokens
-                        )}
-                        icon={DatabaseIcon}
-                      />
-                      <MetricCard
-                        label={t.averageDuration}
-                        value={format.duration(data.overview.averageDurationMs)}
-                        detail={t.errorPercentage(
-                          format.percent(data.overview.errorRate)
-                        )}
-                        icon={Clock3Icon}
-                      />
-                    </div>
-
-                    <div className="grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(340px,1fr)]">
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>{t.activitySignal}</CardTitle>
-                          <CardDescription>{t.dailyRequests}</CardDescription>
-                          <CardAction>
-                            <Badge variant="outline">
-                              {rangeLabels[filters.range]}
-                            </Badge>
-                          </CardAction>
-                        </CardHeader>
-                        <CardContent>
-                          <ActivityChart data={data.timeseries} />
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>{t.modelFootprint}</CardTitle>
-                          <CardDescription>{t.tokensByModel}</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <ModelChart data={data.models} />
-                        </CardContent>
-                      </Card>
-                    </div>
-
-                    <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>{t.activeProjects}</CardTitle>
-                          <CardDescription>
-                            {t.projectDistribution}
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent className="flex flex-col gap-3">
-                          {data.projects.slice(0, 5).map((project, index) => (
-                            <div key={project.project}>
-                              {index > 0 ? (
-                                <hr className="mb-3 border-0 border-t" />
-                              ) : null}
-                              <div className="flex items-center justify-between gap-4">
-                                <div className="min-w-0">
-                                  <p className="truncate font-medium">
-                                    {project.label || t.noProject}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {t.sessionsAndTokens(
-                                      format.number(project.sessions),
-                                      project.sessions,
-                                      format.compact(project.tokens),
-                                      project.tokens
-                                    )}
-                                  </p>
-                                </div>
-                                <span className="font-mono text-sm tabular-nums">
-                                  {format.currency(project.cost)}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                          <div className="flex justify-end border-t pt-3">
-                            <Link
-                              to={{
-                                pathname: dashboardPaths.sessions,
-                                search: dashboardSearchForPage(
-                                  location.search,
-                                  "sessions"
-                                ),
-                              }}
-                              className="inline-flex h-7 items-center gap-1.5 text-xs font-medium text-primary hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
-                            >
-                              {t.sessions}
-                              <ArrowRightIcon
-                                aria-hidden="true"
-                                className="size-4"
-                              />
-                            </Link>
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>{t.mostUsedSkills}</CardTitle>
-                          <CardDescription>{t.skillUsageRule}</CardDescription>
-                        </CardHeader>
-                        <CardContent className="flex flex-col gap-3">
-                          {data.skills.slice(0, 6).map((skill, index) => (
-                            <div key={skill.name}>
-                              {index > 0 ? (
-                                <hr className="mb-3 border-0 border-t" />
-                              ) : null}
-                              <div className="flex items-center justify-between gap-4">
-                                <code className="truncate text-xs text-foreground">
-                                  {skill.name}
-                                </code>
-                                <span className="font-mono text-sm text-foreground tabular-nums">
-                                  {format.number(skill.uses)}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                          <div className="flex justify-end border-t pt-3">
-                            <Link
-                              to={{
-                                pathname: dashboardPaths.skills,
-                                search: dashboardSearchForPage(
-                                  location.search,
-                                  "skills"
-                                ),
-                              }}
-                              className="inline-flex h-7 items-center gap-1.5 text-xs font-medium text-primary hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
-                            >
-                              {t.skills}
-                              <ArrowRightIcon
-                                aria-hidden="true"
-                                className="size-4"
-                              />
-                            </Link>
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>{t.providers}</CardTitle>
-                          <CardDescription>
-                            {t.trafficDistribution}
-                          </CardDescription>
-                        </CardHeader>
-                        <CardContent className="flex flex-col gap-3">
-                          {data.providers.slice(0, 5).map((provider, index) => (
-                            <div key={provider.provider}>
-                              {index > 0 ? (
-                                <hr className="mb-3 border-0 border-t" />
-                              ) : null}
-                              <div className="flex items-center justify-between gap-4">
-                                <div>
-                                  <p className="font-medium">
-                                    {provider.provider}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {t.requestsAndTokens(
-                                      format.number(provider.requests),
-                                      provider.requests,
-                                      format.compact(provider.tokens),
-                                      provider.tokens
-                                    )}
-                                  </p>
-                                </div>
-                                <span className="font-mono text-sm tabular-nums">
-                                  {format.currency(provider.cost)}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                          <div className="flex justify-end border-t pt-3">
-                            <Link
-                              to={{
-                                pathname: dashboardPaths.models,
-                                search: dashboardSearchForPage(
-                                  location.search,
-                                  "models"
-                                ),
-                              }}
-                              className="inline-flex h-7 items-center gap-1.5 text-xs font-medium text-primary hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
-                            >
-                              {t.models}
-                              <ArrowRightIcon
-                                aria-hidden="true"
-                                className="size-4"
-                              />
-                            </Link>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  </div>
+                  <OverviewPage
+                    data={data}
+                    rangeLabel={rangeLabels[filters.range]}
+                    search={location.search}
+                  />
                 }
               />
-
               <Route
                 path={dashboardPaths.costs}
                 element={
-                  <div className="flex flex-col gap-4">
-                    <div className="grid gap-4 md:grid-cols-3">
-                      <MetricCard
-                        label={t.apiEquivalent}
-                        value={format.currency(data.overview.cost)}
-                        detail={t.catalogRates}
-                        icon={CoinsIcon}
-                      />
-                      <MetricCard
-                        label={t.averagePerActiveDay}
-                        value={format.currency(averageDailyCost)}
-                        detail={t.activeDays(
-                          format.number(activeCostDays.length),
-                          activeCostDays.length
-                        )}
-                        icon={ActivityIcon}
-                      />
-                      <MetricCard
-                        label={t.dailyPeak}
-                        value={format.currency(peakCostDay?.cost ?? 0)}
-                        detail={
-                          peakCostDay
-                            ? format.day(peakCostDay.date)
-                            : t.noActivity
-                        }
-                        icon={ZapIcon}
-                      />
-                    </div>
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>{t.apiEquivalentPerDay}</CardTitle>
-                        <CardDescription>{t.costEstimate}</CardDescription>
-                        <CardAction>
-                          <Badge variant="outline">
-                            {rangeLabels[filters.range]}
-                          </Badge>
-                        </CardAction>
-                      </CardHeader>
-                      <CardContent>
-                        <CostChart data={data.timeseries} />
-                      </CardContent>
-                    </Card>
-                  </div>
+                  <CostsPage
+                    data={data}
+                    rangeLabel={rangeLabels[filters.range]}
+                  />
                 }
               />
-
               <Route
                 path={dashboardPaths.sessions}
                 element={
-                  <div className="flex flex-col gap-4">
-                    {sessionsData ? (
-                      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                        <MetricCard
-                          label={t.sessions}
-                          value={format.number(sessionCount)}
-                          detail={rangeLabels[filters.range]}
-                          icon={BoxIcon}
-                        />
-                        <MetricCard
-                          label={t.averageRequestsPerSession}
-                          value={format.number(
-                            averagePerSession(data.overview.requests)
-                          )}
-                          detail={t.requestCount(
-                            format.compact(data.overview.requests),
-                            data.overview.requests
-                          )}
-                          icon={ActivityIcon}
-                        />
-                        <MetricCard
-                          label={t.averageTokensPerSession}
-                          value={format.compact(
-                            averagePerSession(data.overview.totalTokens)
-                          )}
-                          detail={t.tokenCount(
-                            format.compact(data.overview.totalTokens),
-                            data.overview.totalTokens
-                          )}
-                          icon={SparklesIcon}
-                        />
-                        <MetricCard
-                          label={t.averageCostPerSession}
-                          value={format.currency(
-                            averagePerSession(data.overview.cost)
-                          )}
-                          detail={`${format.currency(data.overview.cost)} · ${t.apiEquivalent}`}
-                          icon={CoinsIcon}
-                        />
-                      </div>
-                    ) : null}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>{t.costBySession}</CardTitle>
-                        <CardDescription>
-                          {t.sessionCostDetails}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="overflow-x-auto">
-                        {sessionsData ? (
-                          <SessionsTable
-                            rows={sessionsData.rows}
-                            total={sessionsData.total}
-                            page={sessionsData.page}
-                            pageSize={sessionsData.pageSize}
-                            sort={sessionPage.sort}
-                            direction={sessionPage.direction}
-                            isLoading={isSessionsLoading}
-                            onPageChange={(page) =>
-                              setSearchParams((current) =>
-                                withSessionPage(current, { page })
-                              )
-                            }
-                            onSortChange={updateSessionSort}
-                          />
-                        ) : (
-                          <Skeleton className="h-56 w-full" />
-                        )}
-                      </CardContent>
-                    </Card>
-                  </div>
+                  <SessionsPage
+                    data={data}
+                    sessionsData={sessionsData}
+                    sessionPage={sessionPage}
+                    rangeLabel={rangeLabels[filters.range]}
+                    isLoading={isSessionsLoading}
+                    onPageChange={(page) =>
+                      setSearchParams((current) =>
+                        withSessionPage(current, { page })
+                      )
+                    }
+                    onSortChange={updateSessionSort}
+                  />
                 }
               />
-
               <Route
                 path={dashboardPaths.models}
                 element={
-                  <div className="flex flex-col gap-4">
-                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                      <MetricCard
-                        label={t.activeModels}
-                        value={format.number(data.models.length)}
-                        detail={t.providerCount(
-                          format.number(activeModelProviders),
-                          activeModelProviders
-                        )}
-                        icon={BoxIcon}
-                      />
-                      <MetricCard
-                        label={t.topTokens}
-                        value={format.percent(topTokenShare)}
-                        detail={topTokenModel?.model ?? t.noActivity}
-                        icon={SparklesIcon}
-                      />
-                      <MetricCard
-                        label={t.topCost}
-                        value={format.currency(topCostModel?.cost ?? 0)}
-                        detail={topCostModel?.model ?? t.noActivity}
-                        icon={CoinsIcon}
-                      />
-                      <MetricCard
-                        label={t.cache}
-                        value={format.percent(data.overview.cacheRate)}
-                        detail={t.tokensRead(
-                          format.compact(data.overview.cacheReadTokens),
-                          data.overview.cacheReadTokens
-                        )}
-                        icon={DatabaseIcon}
-                      />
-                    </div>
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>{t.models}</CardTitle>
-                        <CardDescription>{t.modelDetails}</CardDescription>
-                      </CardHeader>
-                      <CardContent className="overflow-x-auto">
-                        <ModelsTable
-                          rows={data.models}
-                          hiddenRows={data.hiddenModels}
-                          hidingModel={hidingModel}
-                          showingModel={showingModel}
-                          onHide={handleHideModel}
-                          onShow={showModel}
-                        />
-                      </CardContent>
-                    </Card>
-                  </div>
+                  <ModelsPage
+                    data={data}
+                    hidingModel={hidingModel}
+                    showingModel={showingModel}
+                    onHide={handleHideModel}
+                    onShow={showModel}
+                  />
                 }
               />
-
               <Route
                 path={dashboardPaths.tools}
                 element={
-                  <div className="flex flex-col gap-4">
-                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                      <MetricCard
-                        label={t.activeTools}
-                        value={format.number(data.tools.length)}
-                        detail={rangeLabels[filters.range]}
-                        icon={WrenchIcon}
-                      />
-                      <MetricCard
-                        label={t.calls}
-                        value={format.compact(toolCalls)}
-                        detail={t.averageCallsPerTool(
-                          format.number(
-                            toolCalls / Math.max(data.tools.length, 1)
-                          )
-                        )}
-                        icon={ActivityIcon}
-                      />
-                      <MetricCard
-                        label={t.topTool}
-                        value={format.percent(topToolShare)}
-                        detail={topTool?.name ?? t.noActivity}
-                        icon={ZapIcon}
-                      />
-                      <MetricCard
-                        label={t.errorRate}
-                        value={format.percent(
-                          toolCalls > 0 ? toolErrors / toolCalls : 0
-                        )}
-                        detail={t.errorCount(
-                          format.number(toolErrors),
-                          toolErrors
-                        )}
-                        icon={AlertTriangleIcon}
-                      />
-                    </div>
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>{t.tools}</CardTitle>
-                        <CardDescription>{t.toolDetails}</CardDescription>
-                      </CardHeader>
-                      <CardContent className="overflow-x-auto">
-                        <ToolsTable rows={data.tools} />
-                      </CardContent>
-                    </Card>
-                  </div>
+                  <ToolsPage
+                    data={data}
+                    rangeLabel={rangeLabels[filters.range]}
+                  />
                 }
               />
-
               <Route
                 path={dashboardPaths.skills}
                 element={
-                  <div className="flex flex-col gap-4">
-                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                      <MetricCard
-                        label={t.activeSkills}
-                        value={format.number(data.skills.length)}
-                        detail={rangeLabels[filters.range]}
-                        icon={BookOpenIcon}
-                      />
-                      <MetricCard
-                        label={t.uses}
-                        value={format.compact(skillUses)}
-                        detail={t.skillUsageRule}
-                        icon={ActivityIcon}
-                      />
-                      <MetricCard
-                        label={t.topSkill}
-                        value={format.percent(topSkillShare)}
-                        detail={topSkill?.name ?? t.noActivity}
-                        icon={ZapIcon}
-                      />
-                      <MetricCard
-                        label={t.lastUsed}
-                        value={format.dateTime(lastUsedSkill?.lastUsed ?? "")}
-                        detail={lastUsedSkill?.name ?? t.noActivity}
-                        icon={Clock3Icon}
-                      />
-                    </div>
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>{t.mostUsedSkills}</CardTitle>
-                        <CardDescription>{t.skillDetails}</CardDescription>
-                      </CardHeader>
-                      <CardContent className="overflow-x-auto">
-                        <SkillsTable rows={data.skills} />
-                      </CardContent>
-                    </Card>
-                  </div>
+                  <SkillsPage
+                    data={data}
+                    rangeLabel={rangeLabels[filters.range]}
+                  />
                 }
               />
             </Routes>
