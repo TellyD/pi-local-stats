@@ -45,7 +45,8 @@
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "typecheck": "tsc -b",
-    "test": "vitest run"
+    "test": "vitest run --exclude tests/scale.test.ts",
+    "test:scale": "vitest run tests/scale.test.ts --reporter=verbose"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

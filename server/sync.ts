@@ -170,6 +170,36 @@ export class SessionSynchronizer {
     const requiresReconciliation = [...known.values()].some(
       (indexed) => indexed.size === -1
     )
+    const deleteRequests = this.db.prepare(
+      "DELETE FROM requests WHERE file_path = ?"
+    )
+    const deleteToolCalls = this.db.prepare(
+      "DELETE FROM tool_calls WHERE file_path = ?"
+    )
+    const deleteSession = this.db.prepare(
+      "DELETE FROM sessions WHERE file_path = ?"
+    )
+    const deleteSkillUsages = this.db.prepare(
+      "DELETE FROM skill_usages WHERE file_path = ?"
+    )
+    const deleteIndexedFile = this.db.prepare(
+      "DELETE FROM indexed_files WHERE path = ?"
+    )
+    const insertSession = this.db.prepare(
+      "INSERT INTO sessions (file_path, session_id, cwd, name, started_at, parent_session, accounting_session_id, session_kind, linkage_precision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    const insertRequest = this.db.prepare(
+      "INSERT INTO requests (id, source_key, request_key, file_path, session_id, accounting_session_id, cwd, timestamp, provider, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, total_tokens, cost, is_error, duration_ms, source_channel, usage_scope, token_precision, cost_precision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    const insertToolCall = this.db.prepare(
+      "INSERT INTO tool_calls (id, source_key, file_path, session_id, cwd, name, provider, model, started_at, duration_ms, is_error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    const insertSkillUsage = this.db.prepare(
+      "INSERT INTO skill_usages (id, source_key, file_path, session_id, cwd, skill, provider, model, used_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    const upsertIndexedFile = this.db.prepare(
+      "INSERT INTO indexed_files (path, size, mtime_ms, indexed_at, retain_when_missing, source_channel) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(path) DO UPDATE SET size = excluded.size, mtime_ms = excluded.mtime_ms, indexed_at = excluded.indexed_at, retain_when_missing = excluded.retain_when_missing, source_channel = excluded.source_channel"
+    )
     for (const filePath of known.keys())
       if (unreadable.some((directory) => isWithin(directory, filePath)))
         known.delete(filePath)
@@ -246,41 +276,26 @@ export class SessionSynchronizer {
         .map((observation) => observation.rootSessionRef)
         .find((value): value is string => Boolean(value))
       const replace = this.db.transaction(() => {
-        this.db
-          .prepare("DELETE FROM requests WHERE file_path = ?")
-          .run(filePath)
-        this.db
-          .prepare("DELETE FROM tool_calls WHERE file_path = ?")
-          .run(filePath)
-        this.db
-          .prepare("DELETE FROM sessions WHERE file_path = ?")
-          .run(filePath)
-        this.db
-          .prepare("DELETE FROM skill_usages WHERE file_path = ?")
-          .run(filePath)
+        deleteRequests.run(filePath)
+        deleteToolCalls.run(filePath)
+        deleteSession.run(filePath)
+        deleteSkillUsages.run(filePath)
         replaceAgentObservations(this.db, filePath, observations)
         if (parsed) {
           const accountingSessionId = inferredParentSession ?? parsed.id
-          this.db
-            .prepare(
-              "INSERT INTO sessions (file_path, session_id, cwd, name, started_at, parent_session, accounting_session_id, session_kind, linkage_precision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-            )
-            .run(
-              filePath,
-              parsed.id,
-              parsed.cwd,
-              parsed.name,
-              parsed.startedAt,
-              parsed.parentSession,
-              accountingSessionId,
-              observations.length && inferredParentSession ? "agent" : "root",
-              inferredParentSession ? "estimated" : "unknown"
-            )
-          const request = this.db.prepare(
-            `INSERT INTO requests (id, source_key, request_key, file_path, session_id, accounting_session_id, cwd, timestamp, provider, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, total_tokens, cost, is_error, duration_ms, source_channel, usage_scope, token_precision, cost_precision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          insertSession.run(
+            filePath,
+            parsed.id,
+            parsed.cwd,
+            parsed.name,
+            parsed.startedAt,
+            parsed.parentSession,
+            accountingSessionId,
+            observations.length && inferredParentSession ? "agent" : "root",
+            inferredParentSession ? "estimated" : "unknown"
           )
           for (const item of parsed.requests)
-            request.run(
+            insertRequest.run(
               item.id,
               item.sourceKey,
               item.requestKey,
@@ -304,11 +319,8 @@ export class SessionSynchronizer {
               item.tokenPrecision,
               item.costPrecision
             )
-          const tool = this.db.prepare(
-            "INSERT INTO tool_calls (id, source_key, file_path, session_id, cwd, name, provider, model, started_at, duration_ms, is_error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-          )
           for (const item of parsed.tools)
-            tool.run(
+            insertToolCall.run(
               item.id,
               item.sourceKey,
               filePath,
@@ -321,11 +333,8 @@ export class SessionSynchronizer {
               item.durationMs,
               Number(item.isError)
             )
-          const skill = this.db.prepare(
-            "INSERT INTO skill_usages (id, source_key, file_path, session_id, cwd, skill, provider, model, used_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-          )
           for (const item of parsed.skills)
-            skill.run(
+            insertSkillUsage.run(
               item.id,
               item.sourceKey,
               filePath,
@@ -342,18 +351,14 @@ export class SessionSynchronizer {
         )
         const retainWhenMissing = retainingAdapter ? 1 : 0
         const sourceChannel = observations[0]?.channel ?? "pi-session"
-        this.db
-          .prepare(
-            "INSERT INTO indexed_files (path, size, mtime_ms, indexed_at, retain_when_missing, source_channel) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(path) DO UPDATE SET size = excluded.size, mtime_ms = excluded.mtime_ms, indexed_at = excluded.indexed_at, retain_when_missing = excluded.retain_when_missing, source_channel = excluded.source_channel"
-          )
-          .run(
-            filePath,
-            metadata.size,
-            metadata.mtimeMs,
-            new Date().toISOString(),
-            retainWhenMissing,
-            sourceChannel
-          )
+        upsertIndexedFile.run(
+          filePath,
+          metadata.size,
+          metadata.mtimeMs,
+          new Date().toISOString(),
+          retainWhenMissing,
+          sourceChannel
+        )
       })
       replace()
       updated += 1
@@ -362,22 +367,12 @@ export class SessionSynchronizer {
     const remove = this.db.transaction(() => {
       for (const [filePath, indexed] of known) {
         if (indexed.retain_when_missing) continue
-        this.db
-          .prepare("DELETE FROM requests WHERE file_path = ?")
-          .run(filePath)
-        this.db
-          .prepare("DELETE FROM tool_calls WHERE file_path = ?")
-          .run(filePath)
-        this.db
-          .prepare("DELETE FROM sessions WHERE file_path = ?")
-          .run(filePath)
-        this.db
-          .prepare("DELETE FROM skill_usages WHERE file_path = ?")
-          .run(filePath)
+        deleteRequests.run(filePath)
+        deleteToolCalls.run(filePath)
+        deleteSession.run(filePath)
+        deleteSkillUsages.run(filePath)
         deleteAgentObservations(this.db, filePath)
-        this.db
-          .prepare("DELETE FROM indexed_files WHERE path = ?")
-          .run(filePath)
+        deleteIndexedFile.run(filePath)
         removed += 1
       }
     })

@@ -179,7 +179,7 @@ export function App() {
     sync,
     hideModel,
     showModel,
-  } = useStats(filters, sessionPage)
+  } = useStats(filters, sessionPage, currentPage?.id === "sessions")
 
   useEffect(() => {
     if (

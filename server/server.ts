@@ -70,11 +70,13 @@ export class StatsServer {
 
   constructor(options: StatsServerOptions = {}) {
     this.db = createDatabase(options.databasePath)
-    this.requiresInitialSync = Boolean(
-      this.db
-        .prepare("SELECT 1 FROM indexed_files WHERE size = -1 LIMIT 1")
-        .get()
-    )
+    this.requiresInitialSync =
+      !this.db.prepare("SELECT 1 FROM indexed_files LIMIT 1").get() ||
+      Boolean(
+        this.db
+          .prepare("SELECT 1 FROM indexed_files WHERE size = -1 LIMIT 1")
+          .get()
+      )
     this.synchronizer = new SessionSynchronizer(
       this.db,
       options.sessionsDirectory ?? getSessionsDirectory(),
@@ -98,8 +100,7 @@ export class StatsServer {
           resolveStart()
         })
       }).then(() => {
-        this.initialSync = this.sync()
-        void this.initialSync.catch(() => undefined)
+        void this.ensureInitialSync().catch(() => undefined)
         this.autoSyncTimer = setInterval(() => {
           void this.sync().catch(() => undefined)
         }, 30_000)
@@ -130,6 +131,14 @@ export class StatsServer {
     this.initialSync = null
     this.startPromise = null
     this.db.close()
+  }
+
+  private ensureInitialSync(): Promise<SyncResult> {
+    const promise = (this.initialSync ??= this.sync())
+    void promise.catch(() => {
+      if (this.initialSync === promise) this.initialSync = null
+    })
+    return promise
   }
 
   private sync(): Promise<SyncResult> {
@@ -252,10 +261,17 @@ export class StatsServer {
           return this.send(
             response,
             200,
-            JSON.stringify(await this.initialSync),
+            JSON.stringify(await this.ensureInitialSync()),
             "application/json; charset=utf-8"
           )
-        if (this.requiresInitialSync) await this.initialSync
+        if (request.method === "POST" && url.pathname === "/api/sync")
+          return this.send(
+            response,
+            200,
+            JSON.stringify(await this.sync()),
+            "application/json; charset=utf-8"
+          )
+        if (this.requiresInitialSync) await this.ensureInitialSync()
         if (request.method === "GET" && url.pathname === "/api/stats")
           return this.send(
             response,
@@ -283,13 +299,6 @@ export class StatsServer {
             "application/json; charset=utf-8"
           )
         }
-        if (request.method === "POST" && url.pathname === "/api/sync")
-          return this.send(
-            response,
-            200,
-            JSON.stringify(await this.sync()),
-            "application/json; charset=utf-8"
-          )
         if (request.method === "POST" && url.pathname === "/api/models/hide") {
           const provider = url.searchParams.get("provider") ?? ""
           const model = url.searchParams.get("model") ?? ""

@@ -142,6 +142,167 @@ describe("StatsServer", () => {
     }
   })
 
+  it("attend le sync initial d’une base neuve avant de servir l’API", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pi-stats-fresh-sync-"))
+    temporaryDirectories.push(directory)
+    const sessionsDirectory = join(directory, "sessions")
+    const databasePath = join(directory, "stats.sqlite")
+    await mkdir(sessionsDirectory)
+    await writeFile(
+      join(sessionsDirectory, "session.jsonl"),
+      [
+        JSON.stringify({
+          type: "session",
+          id: "historical-session",
+          timestamp: "2026-01-01T00:00:00.000Z",
+          cwd: "/work/project",
+        }),
+        JSON.stringify({
+          type: "message",
+          id: "historical-request",
+          timestamp: "2026-01-01T00:00:01.000Z",
+          message: {
+            role: "assistant",
+            provider: "test",
+            model: "historical",
+            stopReason: "stop",
+            content: [],
+            usage: { input: 1, output: 1, totalTokens: 2, cost: 0.01 },
+          },
+        }),
+      ].join("\n")
+    )
+
+    const originalSync = SessionSynchronizer.prototype.sync
+    let releaseSync = (): void => undefined
+    const gate = new Promise<void>((resolve) => {
+      releaseSync = resolve
+    })
+    const syncSpy = vi
+      .spyOn(SessionSynchronizer.prototype, "sync")
+      .mockImplementation(function (this: SessionSynchronizer) {
+        return gate.then(() => originalSync.call(this))
+      })
+    const server = new StatsServer({
+      sessionsDirectory,
+      databasePath,
+      additionalDirectories: [],
+    })
+    const dashboardUrl = new URL(await server.start())
+    const headers = {
+      Authorization: `Bearer ${dashboardUrl.searchParams.get("token")}`,
+    }
+    const responses = Promise.all([
+      fetch(new URL("/api/sync/initial", dashboardUrl), { headers }),
+      fetch(new URL("/api/stats?range=all", dashboardUrl), { headers }),
+      fetch(
+        new URL(
+          "/api/sessions?range=all&page=1&pageSize=10&sort=startedAt&direction=desc",
+          dashboardUrl
+        ),
+        { headers }
+      ),
+    ])
+
+    try {
+      expect(
+        await Promise.race([
+          responses.then(() => true),
+          new Promise<boolean>((resolve) =>
+            setTimeout(() => resolve(false), 50).unref()
+          ),
+        ])
+      ).toBe(false)
+      releaseSync()
+      const [initial, stats, sessions] = await responses
+      expect([initial.status, stats.status, sessions.status]).toEqual([
+        200, 200, 200,
+      ])
+      expect(
+        ((await stats.json()) as { overview: { requests: number } }).overview
+          .requests
+      ).toBe(1)
+      expect(((await sessions.json()) as { total: number }).total).toBe(1)
+      expect(syncSpy).toHaveBeenCalledTimes(1)
+    } finally {
+      releaseSync()
+      await server.close()
+      syncSpy.mockRestore()
+    }
+  })
+
+  it("termine le sync initial d’un répertoire vide", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pi-stats-empty-sync-"))
+    temporaryDirectories.push(directory)
+    const server = new StatsServer({
+      sessionsDirectory: directory,
+      databasePath: join(directory, "stats.sqlite"),
+      additionalDirectories: [],
+    })
+
+    try {
+      const dashboardUrl = new URL(await server.start())
+      const headers = {
+        Authorization: `Bearer ${dashboardUrl.searchParams.get("token")}`,
+      }
+      expect(
+        (
+          (await (
+            await fetch(new URL("/api/stats?range=all", dashboardUrl), {
+              headers,
+            })
+          ).json()) as { meta: { indexedSessions: number } }
+        ).meta.indexedSessions
+      ).toBe(0)
+    } finally {
+      await server.close()
+    }
+  })
+
+  it("permet de relancer un sync initial qui a échoué", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pi-stats-retry-sync-"))
+    temporaryDirectories.push(directory)
+    const originalSync = SessionSynchronizer.prototype.sync
+    let rejectInitial = (): void => undefined
+    const failedInitialSync = new Promise<SyncResult>((_resolve, reject) => {
+      rejectInitial = () => reject(new Error("Initial sync failed"))
+    })
+    const syncSpy = vi
+      .spyOn(SessionSynchronizer.prototype, "sync")
+      .mockReturnValueOnce(failedInitialSync)
+      .mockImplementation(function (this: SessionSynchronizer) {
+        return originalSync.call(this)
+      })
+    const server = new StatsServer({
+      sessionsDirectory: directory,
+      databasePath: join(directory, "stats.sqlite"),
+      additionalDirectories: [],
+    })
+
+    try {
+      const dashboardUrl = new URL(await server.start())
+      const headers = {
+        Authorization: `Bearer ${dashboardUrl.searchParams.get("token")}`,
+      }
+      const failedInitialResponse = fetch(
+        new URL("/api/sync/initial", dashboardUrl),
+        { headers }
+      )
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      rejectInitial()
+      expect((await failedInitialResponse).status).toBe(500)
+      const [initialRetry, statsRetry] = await Promise.all([
+        fetch(new URL("/api/sync/initial", dashboardUrl), { headers }),
+        fetch(new URL("/api/stats?range=all", dashboardUrl), { headers }),
+      ])
+      expect([initialRetry.status, statsRetry.status]).toEqual([200, 200])
+      expect(syncSpy).toHaveBeenCalledTimes(2)
+    } finally {
+      await server.close()
+      syncSpy.mockRestore()
+    }
+  })
+
   it("attend la réindexation exigée par une migration avant de servir l’API", async () => {
     const directory = await mkdtemp(join(tmpdir(), "pi-stats-migration-sync-"))
     temporaryDirectories.push(directory)

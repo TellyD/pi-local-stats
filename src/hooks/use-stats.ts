@@ -54,14 +54,17 @@ async function request<T>(
 
 export function useStats(
   filters: StatsFilters,
-  sessionPage: SessionPageOptions
+  sessionPage: SessionPageOptions,
+  sessionsActive: boolean
 ) {
   const { messages: t } = useI18n()
   const [token] = useState(consumeAccessToken)
   const hasDataRef = useRef(false)
-  const initialSyncRefreshStartedRef = useRef(false)
+  const initialSyncStartedRef = useRef(false)
+  const initialSyncFailedRef = useRef(false)
   const latestRequestRef = useRef(0)
   const latestSessionsRequestRef = useRef(0)
+  const manualRefreshControllerRef = useRef<AbortController | null>(null)
   const [data, setData] = useState<StatsResponse | null>(null)
   const [sessionsData, setSessionsData] = useState<SessionsResponse | null>(
     null
@@ -72,6 +75,7 @@ export function useStats(
   const [error, setError] = useState<string | null>(null)
   const [sessionsError, setSessionsError] = useState<string | null>(null)
   const [syncError, setSyncError] = useState<string | null>(null)
+  const [bootstrapped, setBootstrapped] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSessionsLoading, setIsSessionsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -121,6 +125,7 @@ export function useStats(
     async (signal?: AbortSignal) => {
       const requestId = ++latestSessionsRequestRef.current
       setIsSessionsLoading(true)
+      setSessionsError(null)
       const search = sessionsRequestSearch(filters, sessionPage)
 
       try {
@@ -149,40 +154,118 @@ export function useStats(
     [filters, sessionPage, t, token]
   )
 
-  const loadSessionsRef = useRef(loadSessions)
-  useEffect(() => {
-    loadSessionsRef.current = loadSessions
-  }, [loadSessions])
-
   useEffect(() => {
     const controller = new AbortController()
     void load(controller.signal, hasDataRef.current)
-
-    const interval = window.setInterval(() => {
-      void load(undefined, true)
-      void loadSessionsRef.current()
-    }, REFRESH_INTERVAL_MS)
-
-    return () => {
-      controller.abort()
-      window.clearInterval(interval)
-    }
+    return () => controller.abort()
   }, [load])
 
   useEffect(() => {
+    if (!sessionsActive) return
     const controller = new AbortController()
     void Promise.resolve().then(() => loadSessions(controller.signal))
     return () => controller.abort()
-  }, [loadSessions])
+  }, [loadSessions, sessionsActive])
+
+  const retryInitialSync = useCallback(
+    async (signal: AbortSignal) => {
+      try {
+        await request<SyncResult>("/api/sync/initial", token, t.requestFailed, {
+          signal,
+        })
+        initialSyncFailedRef.current = false
+        setSyncError(null)
+        return true
+      } catch {
+        return false
+      }
+    },
+    [t, token]
+  )
+
+  useEffect(() => {
+    if (!bootstrapped) return
+    let controller: AbortController | null = null
+    let timer: number | null = null
+    let stopped = false
+
+    const schedule = () => {
+      timer = window.setTimeout(() => void poll(), REFRESH_INTERVAL_MS)
+    }
+    const poll = async () => {
+      if (document.hidden) return schedule()
+      controller = new AbortController()
+      if (
+        initialSyncFailedRef.current &&
+        !(await retryInitialSync(controller.signal)) &&
+        !hasDataRef.current
+      ) {
+        if (!stopped) schedule()
+        return
+      }
+      if (stopped || controller.signal.aborted) return
+      await load(controller.signal, true)
+      if (!stopped && sessionsActive) await loadSessions(controller.signal)
+      controller = null
+      if (!stopped) schedule()
+    }
+
+    schedule()
+    return () => {
+      stopped = true
+      controller?.abort()
+      if (timer !== null) window.clearTimeout(timer)
+    }
+  }, [bootstrapped, load, loadSessions, retryInitialSync, sessionsActive])
+
+  useEffect(
+    () => () => {
+      latestRequestRef.current += 1
+    },
+    [load]
+  )
+
+  useEffect(
+    () => () => {
+      manualRefreshControllerRef.current?.abort()
+      manualRefreshControllerRef.current = null
+      latestSessionsRequestRef.current += 1
+    },
+    [loadSessions, sessionsActive]
+  )
+
+  const performRefresh = useCallback(async () => {
+    const controller = new AbortController()
+    manualRefreshControllerRef.current?.abort()
+    manualRefreshControllerRef.current = controller
+    try {
+      if (
+        initialSyncFailedRef.current &&
+        !(await retryInitialSync(controller.signal)) &&
+        !hasDataRef.current
+      )
+        return
+      if (controller.signal.aborted) return
+      const requests = [load(controller.signal, true)]
+      if (sessionsActive) requests.push(loadSessions(controller.signal))
+      await Promise.all(requests)
+    } finally {
+      if (manualRefreshControllerRef.current === controller)
+        manualRefreshControllerRef.current = null
+    }
+  }, [load, loadSessions, retryInitialSync, sessionsActive])
+
+  const refreshRef = useRef<(() => Promise<void>) | null>(performRefresh)
+  useEffect(() => {
+    refreshRef.current = performRefresh
+    return () => {
+      refreshRef.current = null
+    }
+  }, [performRefresh])
 
   const refresh = useCallback(async () => {
-    await Promise.all([load(undefined, true), loadSessions()])
-  }, [load, loadSessions])
-
-  const refreshRef = useRef(refresh)
-  useEffect(() => {
-    refreshRef.current = refresh
-  }, [refresh])
+    await refreshRef.current?.()
+  }, [])
 
   const sync = useCallback(async () => {
     setIsSyncing(true)
@@ -190,26 +273,52 @@ export function useStats(
       await request<SyncResult>("/api/sync", token, t.requestFailed, {
         method: "POST",
       })
+      if (!refreshRef.current) return
+      initialSyncFailedRef.current = false
       setSyncError(null)
-      await refresh()
+      setBootstrapped(true)
+      await refreshRef.current()
     } catch (cause) {
       setSyncError(cause instanceof Error ? cause.message : t.syncFailed)
     } finally {
       setIsSyncing(false)
     }
-  }, [refresh, t, token])
+  }, [t, token])
 
   useEffect(() => {
-    if (initialSyncRefreshStartedRef.current) return
-    initialSyncRefreshStartedRef.current = true
-    void request<SyncResult>("/api/sync/initial", token, t.requestFailed)
-      .then(() => {
+    if (initialSyncStartedRef.current) return
+    initialSyncStartedRef.current = true
+    const controller = new AbortController()
+    let stopped = false
+    setIsSyncing(true)
+    void request<SyncResult>("/api/sync/initial", token, t.requestFailed, {
+      signal: controller.signal,
+    })
+      .then(async () => {
+        if (stopped || !refreshRef.current) return
         setSyncError(null)
-        return refreshRef.current()
+        setBootstrapped(true)
+        await refreshRef.current()
       })
-      .catch((cause) =>
+      .catch((cause) => {
+        if (
+          stopped ||
+          (cause instanceof DOMException && cause.name === "AbortError")
+        )
+          return
+        initialSyncFailedRef.current = true
         setSyncError(cause instanceof Error ? cause.message : t.syncFailed)
-      )
+        setBootstrapped(true)
+        setIsLoading(false)
+      })
+      .finally(() => {
+        if (!stopped) setIsSyncing(false)
+      })
+    return () => {
+      stopped = true
+      controller.abort()
+      initialSyncStartedRef.current = false
+    }
   }, [t, token])
 
   const hideModel = useCallback(
@@ -261,8 +370,9 @@ export function useStats(
 
   return {
     data,
-    sessionsData,
-    error: syncError ?? error ?? sessionsError,
+    sessionsData:
+      loadedSessionsRequest === currentSessionsRequest ? sessionsData : null,
+    error: syncError ?? error ?? (sessionsActive ? sessionsError : null),
     isLoading,
     isSessionsLoading,
     loadedSessionsRequest,
