@@ -17,6 +17,7 @@ dist-ssr
 *.sqlite-shm
 *.sqlite-wal
 *.tgz
+AGENTS.md
 
 # Editor directories and files
 .vscode/*
