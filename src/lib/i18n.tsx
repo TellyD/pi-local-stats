@@ -113,6 +113,67 @@ const english = {
   noRequests: "No requests",
   noSessions: "No sessions",
   unnamedSession: "Unnamed session",
+  openSessionTrace: (session: string) => `Analyze ${session}`,
+  backToSessions: "Back to sessions",
+  sessionTrace: "Session analysis",
+  traceScope:
+    "Full session · hidden models excluded · metadata only, no message or tool content.",
+  showRawTrace: (count: number) =>
+    `Show timeline · ${count} ${count === 1 ? "event" : "events"}`,
+  hideRawTrace: "Hide timeline",
+  evidenceTimeline: "Timeline",
+  traceDescription:
+    "Select an agent’s bar, an activity group, or a lane’s event count to inspect its events.",
+  traceErrorsByType: "Failures by event type",
+  traceRequestErrors: (count: number) =>
+    `${count} failed ${count === 1 ? "request" : "requests"}`,
+  traceToolErrors: (count: number) =>
+    `${count} failed tool ${count === 1 ? "call" : "calls"}`,
+  traceFailedAgents: (count: number) =>
+    `${count} failed ${count === 1 ? "agent" : "agents"}`,
+  traceShowAll: "Show all events",
+  traceSelectedEvents: (count: number) => `${count} selected events`,
+  traceEventList: "Events in selection",
+  traceScrollableTimeline: "Scrollable timeline",
+  traceLaneEvents: (label: string, count: number) =>
+    `Inspect ${count} events in ${label}`,
+  traceLaneCost: (label: string, cost: string, share: string | null) =>
+    `Cost accounted to ${label}: ${cost}${share ? ` (${share} of the total)` : ""}`,
+  traceLaneCostUnknown: (label: string) =>
+    `${label} reports tokens but no priced cost; it counts as zero in the session total`,
+  traceCostCoverage: (count: number, tokens: string) =>
+    `The session total excludes ${count} ${count === 1 ? "agent" : "agents"} with ${tokens} tokens but no priced cost, so shares of the total are not shown.`,
+  traceUntimedEvents: (count: number) => `${count} events without timing`,
+  traceGap: "Gap without timed events; may be a pause or missing timing data",
+  traceLegend: "Timeline legend",
+  mainSession: "Pi session",
+  idleTimeCompressed:
+    "Unobserved gaps are compressed to keep activity readable",
+  showMoreAgents: (count: number) =>
+    `Show ${count} more ${count === 1 ? "agent" : "agents"}`,
+  showFewerAgents: "Show fewer agents",
+  activityBucket: (requests: number, tools: number, errors: number) => {
+    const activity = `${requests} ${requests === 1 ? "request" : "requests"} · ${tools} ${tools === 1 ? "tool" : "tools"}`
+    if (!errors) return activity
+    return `${activity} · ${errors} ${errors === 1 ? "error" : "errors"}`
+  },
+  traceRequest: "Request",
+  traceTool: "Tool",
+  traceError: "Error",
+  traceAgentFailed: "Failed",
+  traceNotAccounted: "Not included in the session total",
+  traceDetails: "Selected event",
+  traceNoEvents: "No visible events for this session.",
+  timingUnavailable: "Timing unavailable",
+  includedInTotal: "Included in the session total",
+  started: "Started",
+  status: "Status",
+  observedDuration: "Observed duration",
+  observedDurationDetail:
+    "Elapsed time between the first and last observed event.",
+  requestMetricDetail: "Model requests recorded in this session.",
+  tokenMetricDetail: "Tokens accounted to this session.",
+  costMetricDetail: "API-equivalent estimate from recorded usage.",
   sortBy: (column: string) => `Sort by ${column}`,
   showAgentCosts: (session: string) => `Show agent costs for ${session}`,
   hideAgentCosts: (session: string) => `Hide agent costs for ${session}`,
@@ -256,6 +317,68 @@ const french: Messages = {
   noRequests: "Aucune requête",
   noSessions: "Aucune session",
   unnamedSession: "Session sans nom",
+  openSessionTrace: (session) => `Analyser ${session}`,
+  backToSessions: "Retour aux sessions",
+  sessionTrace: "Analyse de session",
+  traceScope:
+    "Session entière · modèles masqués exclus · métadonnées seules, sans contenu des messages ou outils.",
+  showRawTrace: (count) =>
+    `Afficher la chronologie · ${count} événement${count === 1 ? "" : "s"}`,
+  hideRawTrace: "Masquer la chronologie",
+  evidenceTimeline: "Chronologie",
+  traceDescription:
+    "Sélectionnez la barre d’un agent, un groupe d’activité ou le compteur d’une ligne pour consulter ses événements.",
+  traceErrorsByType: "Échecs par type d’événement",
+  traceRequestErrors: (count) =>
+    `${count} requête${count === 1 ? "" : "s"} en erreur`,
+  traceToolErrors: (count) =>
+    `${count} appel${count === 1 ? "" : "s"} d’outil en erreur`,
+  traceFailedAgents: (count) =>
+    `${count} agent${count === 1 ? "" : "s"} en échec`,
+  traceShowAll: "Tout afficher",
+  traceSelectedEvents: (count) => `${count} événements sélectionnés`,
+  traceEventList: "Événements de la sélection",
+  traceScrollableTimeline: "Chronologie défilante",
+  traceLaneEvents: (label, count) =>
+    `Consulter ${count} événements de ${label}`,
+  traceLaneCost: (label, cost, share) =>
+    `Coût comptabilisé pour ${label} : ${cost}${share ? ` (${share} du total)` : ""}`,
+  traceLaneCostUnknown: (label) =>
+    `${label} rapporte des tokens mais aucun coût chiffré ; il compte pour zéro dans le total de la session`,
+  traceCostCoverage: (count, tokens) =>
+    `Le total de la session exclut ${count} agent${count === 1 ? "" : "s"} avec ${tokens} tokens mais sans coût chiffré ; les parts du total ne sont donc pas affichées.`,
+  traceUntimedEvents: (count) => `${count} événements sans timing`,
+  traceGap:
+    "Intervalle sans événement chronométré : pause possible ou données temporelles manquantes",
+  traceLegend: "Légende de la chronologie",
+  mainSession: "Session Pi",
+  idleTimeCompressed:
+    "Les intervalles non observés sont compressés pour garder l’activité lisible",
+  showMoreAgents: (count) =>
+    `Afficher ${count} agent${count === 1 ? "" : "s"} de plus`,
+  showFewerAgents: "Afficher moins d’agents",
+  activityBucket: (requests, tools, errors) => {
+    const activity = `${requests} requête${requests === 1 ? "" : "s"} · ${tools} outil${tools === 1 ? "" : "s"}`
+    if (!errors) return activity
+    return `${activity} · ${errors} erreur${errors === 1 ? "" : "s"}`
+  },
+  traceRequest: "Requête",
+  traceTool: "Outil",
+  traceError: "Erreur",
+  traceAgentFailed: "Échec",
+  traceNotAccounted: "Non inclus dans le total de la session",
+  traceDetails: "Événement sélectionné",
+  traceNoEvents: "Aucun événement visible pour cette session.",
+  timingUnavailable: "Timing indisponible",
+  includedInTotal: "Inclus dans le total de la session",
+  started: "Début",
+  status: "Statut",
+  observedDuration: "Durée observée",
+  observedDurationDetail:
+    "Temps écoulé entre le premier et le dernier événement observé.",
+  requestMetricDetail: "Requêtes modèle enregistrées dans cette session.",
+  tokenMetricDetail: "Tokens comptabilisés dans cette session.",
+  costMetricDetail: "Estimation équivalente API issue de l’usage enregistré.",
   sortBy: (column) => `Trier par ${column}`,
   showAgentCosts: (session) => `Afficher le coût des agents de ${session}`,
   hideAgentCosts: (session) => `Masquer le coût des agents de ${session}`,

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { createFormatters } from "../src/lib/format.ts"
 import {
   catalogs,
   DEFAULT_LANGUAGE,
@@ -6,6 +7,21 @@ import {
 } from "../src/lib/i18n.tsx"
 
 describe("localization", () => {
+  it.each(["en-US", "fr-FR"])(
+    "distinguishes events within a minute in %s",
+    (locale) => {
+      const format = createFormatters(locale)
+      const first = "2026-08-28T12:00:01.000Z"
+      const second = "2026-08-28T12:00:45.000Z"
+      expect(format.dateTime(first)).toBe(format.dateTime(second))
+      expect(format.dateTime(first, true)).not.toBe(
+        format.dateTime(second, true)
+      )
+      expect(format.dateTime(second, true)).toContain(":45")
+      expect(format.dateTime("invalid", true)).toBe("—")
+    }
+  )
+
   it("defaults safely to English and exposes complete English and French catalogs", () => {
     expect(DEFAULT_LANGUAGE).toBe("en")
     expect(resolveLanguage(null)).toBe("en")

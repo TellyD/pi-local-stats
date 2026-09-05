@@ -46,7 +46,8 @@
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "typecheck": "tsc -b",
     "test": "vitest run --exclude tests/scale.test.ts",
-    "test:scale": "vitest run tests/scale.test.ts --reporter=verbose"
+    "test:scale": "vitest run tests/scale.test.ts --reporter=verbose",
+    "visual:capture": "playwright test"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
@@ -60,6 +61,7 @@
     "@earendil-works/pi-coding-agent": "^0.84.1",
     "@eslint/js": "^10",
     "@fontsource-variable/geist": "^5.3.0",
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/vite": "^4",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^24",

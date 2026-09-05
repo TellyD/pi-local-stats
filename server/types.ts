@@ -108,6 +108,44 @@ export interface SessionsResponse {
   total: number
 }
 
+export type SessionTraceSpanKind = "agent" | "request" | "tool"
+
+export interface SessionTraceSpan {
+  id: string
+  parentId: string | null
+  depth: number
+  kind: SessionTraceSpanKind
+  label: string
+  startedAt: string | null
+  durationMs: number | null
+  provider: string | null
+  model: string | null
+  tokens: number | null
+  cost: number | null
+  isError: boolean
+  status: AgentStatus | null
+  includedInSessionTotal: boolean | null
+}
+
+export interface SessionTraceResponse {
+  session: {
+    id: string
+    name: string
+    project: string
+    label: string
+    startedAt: string
+    durationMs: number
+    requests: number
+    tokens: number
+    cost: number
+  }
+  bounds: {
+    startedAt: string
+    endedAt: string
+  }
+  spans: SessionTraceSpan[]
+}
+
 export interface StatsResponse {
   meta: {
     lastSyncAt: string | null

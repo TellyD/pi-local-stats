@@ -31,6 +31,8 @@ Then run `/stats` inside Pi.
 - Skill usage detected from `read` calls targeting `SKILL.md`, deduplicated per session
 - Navigable pages with direct links and native browser back/forward support
 - URL-backed filters, sorting, and session pagination
+- Per-session timelines with inspectable events and accounted costs per agent
+- Separate request, tool, and agent failure filters, compressed gaps, and mobile timeline scrolling
 - Option to hide selected models from aggregate statistics
 - English and French interface
 - Automatic background sync while the dashboard is open
@@ -51,6 +53,7 @@ Use **Sync** to rescan sessions and supported agent artifacts immediately. Other
 
 - Data stays on your machine.
 - Full Pi conversation messages, model responses, tool inputs and results, and lifecycle error text are not stored in the statistics index.
+- Session traces display only indexed timing, hierarchy, status, model, token, and cost metadata.
 - The index stores session and agent IDs and names, project and artifact paths, timestamps, providers, models, tool and skill names, statuses, provenance, token usage, durations, error flags, and costs.
 - Supported subagent metadata can include selected fields from orchestration tool calls and results, such as the agent type, model, name, and task description.
 - The local API is protected by a random token and only listens on `127.0.0.1`.
@@ -73,7 +76,9 @@ npm run build
 pi -e ./index.ts
 ```
 
-`npm run format` formats the TypeScript and TSX sources in place.
+`npm run format` formats the TypeScript and TSX sources in place. For local
+visual checks, install Chromium once with `npx playwright install chromium`,
+then run `npm run visual:capture`; screenshots are written to `visual-output/`.
 
 ## License
 

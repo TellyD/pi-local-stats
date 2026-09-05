@@ -17,6 +17,11 @@ export const dashboardPaths = {
 
 export type DashboardPageId = keyof typeof dashboardPaths
 
+export interface SessionTraceSelection {
+  id: string
+  project: string
+}
+
 export const dashboardPages = Object.entries(dashboardPaths).map(
   ([id, path]) => ({ id, path })
 ) as Array<{
@@ -34,6 +39,8 @@ export function dashboardSearchForPage(
     next.delete("pageSize")
     next.delete("sort")
     next.delete("direction")
+    next.delete("sessionId")
+    next.delete("sessionProject")
   }
   const value = next.toString()
   return value ? `?${value}` : ""
@@ -105,6 +112,14 @@ export function filtersFromSearch(search: URLSearchParams): StatsFilters {
   }
 }
 
+export function sessionTraceFromSearch(
+  search: URLSearchParams
+): SessionTraceSelection | null {
+  const id = search.get("sessionId")
+  const project = search.get("sessionProject")
+  return id && project !== null ? { id, project } : null
+}
+
 export function sessionPageFromSearch(
   search: URLSearchParams
 ): SessionPageOptions {
@@ -129,9 +144,26 @@ export function withFilter(
 ): URLSearchParams {
   const next = new URLSearchParams(search)
   next.delete("page")
+  next.delete("sessionId")
+  next.delete("sessionProject")
   if (!value || (key === "range" && value === INITIAL_FILTERS.range))
     next.delete(key)
   else next.set(key, value)
+  return next
+}
+
+export function withSessionTrace(
+  search: URLSearchParams,
+  selection: SessionTraceSelection | null
+): URLSearchParams {
+  const next = new URLSearchParams(search)
+  if (selection) {
+    next.set("sessionId", selection.id)
+    next.set("sessionProject", selection.project)
+  } else {
+    next.delete("sessionId")
+    next.delete("sessionProject")
+  }
   return next
 }
 

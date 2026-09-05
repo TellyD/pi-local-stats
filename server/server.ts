@@ -15,6 +15,7 @@ import {
 } from "./database.ts"
 import {
   getSessions,
+  getSessionTrace,
   getStats,
   parseFilters,
   parseSessionPageOptions,
@@ -296,6 +297,29 @@ export class StatsServer {
             JSON.stringify(
               getSessions(this.db, parseFilters(url.searchParams), options)
             ),
+            "application/json; charset=utf-8"
+          )
+        }
+        if (request.method === "GET" && url.pathname === "/api/session-trace") {
+          const id = url.searchParams.get("id") ?? ""
+          const project = url.searchParams.get("project")
+          if (
+            !id ||
+            id.length > 500 ||
+            project === null ||
+            project.length > 4_096
+          )
+            return this.send(
+              response,
+              400,
+              JSON.stringify({ error: "Invalid session selection" }),
+              "application/json; charset=utf-8"
+            )
+          const trace = getSessionTrace(this.db, id, project)
+          return this.send(
+            response,
+            trace ? 200 : 404,
+            JSON.stringify(trace ?? { error: "Session not found" }),
             "application/json; charset=utf-8"
           )
         }

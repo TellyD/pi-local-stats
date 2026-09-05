@@ -28,6 +28,7 @@
 }
 
 :root {
+  color-scheme: light;
   --background: #f4f4f6;
   --foreground: #1c1e22;
   --card: #ffffff;
@@ -48,6 +49,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: #1c1e22;
   --foreground: #e8eaed;
   --card: #22242a;
@@ -69,6 +71,8 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    scrollbar-width: thin;
+    scrollbar-color: var(--muted-foreground) transparent;
   }
 
   html {

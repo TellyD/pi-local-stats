@@ -4,7 +4,7 @@ export interface Formatters {
   currency: (value: number) => string
   percent: (value: number) => string
   duration: (value: number) => string
-  dateTime: (value: string) => string
+  dateTime: (value: string, seconds?: boolean) => string
   day: (value: string) => string
 }
 
@@ -26,11 +26,16 @@ export function createFormatters(locale = "en-US"): Formatters {
     style: "percent",
     maximumFractionDigits: 1,
   })
-  const dateTime = new Intl.DateTimeFormat(locale, {
+  const dateTimeOptions: Intl.DateTimeFormatOptions = {
     day: "2-digit",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
+  }
+  const dateTime = new Intl.DateTimeFormat(locale, dateTimeOptions)
+  const preciseDateTime = new Intl.DateTimeFormat(locale, {
+    ...dateTimeOptions,
+    second: "2-digit",
   })
   const day = new Intl.DateTimeFormat(locale, {
     day: "numeric",
@@ -48,9 +53,11 @@ export function createFormatters(locale = "en-US"): Formatters {
       if (value < 60_000) return `${preciseNumber.format(value / 1_000)} s`
       return `${preciseNumber.format(value / 60_000)} min`
     },
-    dateTime: (value) => {
+    dateTime: (value, seconds = false) => {
       const date = new Date(value)
-      return Number.isNaN(date.getTime()) ? "—" : dateTime.format(date)
+      if (Number.isNaN(date.getTime())) return "—"
+      const formatter = seconds ? preciseDateTime : dateTime
+      return formatter.format(date)
     },
     day: (value) => {
       const date = new Date(`${value}T12:00:00`)

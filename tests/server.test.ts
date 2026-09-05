@@ -542,6 +542,57 @@ describe("StatsServer", () => {
         ).status
       ).toBe(400)
 
+      const traceUrl = new URL("/api/session-trace", dashboardUrl)
+      traceUrl.searchParams.set("id", "server-session")
+      traceUrl.searchParams.set("project", "/work/project")
+      expect((await fetch(traceUrl)).status).toBe(401)
+      const invalidTrace = await fetch(
+        new URL("/api/session-trace?id=server-session", dashboardUrl),
+        { headers }
+      )
+      expect(invalidTrace.status).toBe(400)
+      const missingTrace = await fetch(
+        new URL(
+          "/api/session-trace?id=missing&project=%2Fwork%2Fproject",
+          dashboardUrl
+        ),
+        { headers }
+      )
+      expect(missingTrace.status).toBe(404)
+      const traceResponse = await fetch(traceUrl, { headers })
+      expect(traceResponse.status).toBe(200)
+      const trace = (await traceResponse.json()) as {
+        session: { id: string; requests: number }
+        spans: Array<Record<string, unknown>>
+      }
+      expect(trace.session).toMatchObject({
+        id: "server-session",
+        requests: 2,
+      })
+      expect(trace.spans.some((span) => span.kind === "tool")).toBe(true)
+      expect(Object.keys(trace.spans[0] ?? {}).sort()).toEqual(
+        [
+          "cost",
+          "depth",
+          "durationMs",
+          "id",
+          "includedInSessionTotal",
+          "isError",
+          "kind",
+          "label",
+          "model",
+          "parentId",
+          "provider",
+          "startedAt",
+          "status",
+          "tokens",
+        ].sort()
+      )
+      const traceJson = JSON.stringify(trace)
+      expect(traceJson).not.toContain("/sessions/")
+      expect(traceJson).not.toContain("arguments")
+      expect(traceJson).not.toContain("content")
+
       await appendFile(
         sessionFile,
         `\n${JSON.stringify({ type: "message", id: "new-assistant", parentId: "assistant", timestamp: new Date().toISOString(), message: { role: "assistant", provider: "test", model: "test-model", stopReason: "stop", content: [], usage: { input: 5, output: 2, cacheRead: 0, cacheWrite: 0, totalTokens: 7, cost: { total: 0.02 } } } })}`,

@@ -6,7 +6,11 @@ import {
   replaceAgentObservations,
 } from "../server/agents.ts"
 import { createDatabase } from "../server/database.ts"
-import { getSessions, parseSessionPageOptions } from "../server/stats.ts"
+import {
+  getSessions,
+  getSessionTrace,
+  parseSessionPageOptions,
+} from "../server/stats.ts"
 import type {
   SessionPageOptions,
   SessionSortKey,
@@ -26,11 +30,17 @@ function normalizedObservation({
   sourcePath,
   rootId,
   sourceEntryId,
+  parentNativeId = null,
+  startedAt = "2026-01-01T00:00:01.000Z",
+  completedAt = "2026-01-01T00:00:02.000Z",
 }: {
   id: string
   sourcePath: string
   rootId: string
   sourceEntryId: string
+  parentNativeId?: string | null
+  startedAt?: string | null
+  completedAt?: string | null
 }): AgentObservation {
   return {
     observationKey: `observation:${rootId}:${sourceEntryId}`,
@@ -44,7 +54,7 @@ function normalizedObservation({
     rootSessionRef: rootId,
     rootSessionFile: sourcePath,
     sessionFile: null,
-    parentNativeId: null,
+    parentNativeId,
     workflowId: null,
     workflowStepIndex: null,
     agentType: "worker",
@@ -52,8 +62,8 @@ function normalizedObservation({
     description: null,
     statusRaw: "completed",
     status: "completed",
-    startedAt: "2026-01-01T00:00:01.000Z",
-    completedAt: "2026-01-01T00:00:02.000Z",
+    startedAt,
+    completedAt,
     provider: "openai",
     modelId: "gpt-child",
     modelLabel: null,
@@ -571,5 +581,333 @@ describe("getSessions", () => {
     } finally {
       db.close()
     }
+  })
+})
+
+describe("getSessionTrace", () => {
+  it("ordonne la trace, déduplique les événements et conserve les timings inconnus", () => {
+    const db = createDatabase(":memory:")
+    const rootFile = "/sessions/trace.jsonl"
+    const childFile = "/sessions/trace-child.jsonl"
+    db.prepare(
+      "INSERT INTO sessions (file_path, session_id, cwd, name, started_at, parent_session, accounting_session_id) VALUES (?, 'trace-root', '/work/project', 'Trace root', '2026-01-01T00:00:00.000Z', NULL, 'trace-root')"
+    ).run(rootFile)
+    db.prepare(
+      "INSERT INTO sessions (file_path, session_id, cwd, name, started_at, parent_session, accounting_session_id, session_kind) VALUES (?, 'trace-child', '/work/project', NULL, '2026-01-01T00:00:01.000Z', ?, 'trace-root', 'agent')"
+    ).run(childFile, rootFile)
+
+    const parent = normalizedObservation({
+      id: "parent",
+      sourcePath: rootFile,
+      rootId: "trace-root",
+      sourceEntryId: "parent-entry",
+      startedAt: "2026-01-01T00:00:01.000Z",
+      completedAt: "2026-01-01T00:00:05.000Z",
+    })
+    const child = normalizedObservation({
+      id: "child",
+      sourcePath: rootFile,
+      rootId: "trace-root",
+      sourceEntryId: "child-entry",
+      parentNativeId: "parent",
+      startedAt: "2026-01-01T00:00:02.000Z",
+      completedAt: "2026-01-01T00:00:04.000Z",
+    })
+    parent.displayName = "parent"
+    child.displayName = "child"
+    child.sessionFile = childFile
+    const untimed = normalizedObservation({
+      id: "untimed",
+      sourcePath: rootFile,
+      rootId: "trace-root",
+      sourceEntryId: "untimed-entry",
+      startedAt: null,
+      completedAt: null,
+    })
+    untimed.displayName = "untimed"
+    untimed.usage = null
+    replaceAgentObservations(db, rootFile, [parent, child, untimed])
+    reconcileAgentRuns(db)
+
+    const runKeys = new Map(
+      (
+        db.prepare("SELECT native_id, run_key FROM agent_runs").all() as Array<{
+          native_id: string
+          run_key: string
+        }>
+      ).map((row) => [row.native_id, row.run_key])
+    )
+    const insertRequest = db.prepare(
+      `INSERT INTO requests (
+        id, source_key, request_key, file_path, session_id,
+        accounting_session_id, agent_run_key, cwd, timestamp, provider, model,
+        input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+        total_tokens, cost, is_error, duration_ms, usage_scope
+      ) VALUES (?, ?, ?, ?, ?, 'trace-root', ?, '/work/project', ?, 'openai',
+        'gpt', 1, 1, 0, 0, ?, ?, 0, ?, ?)`
+    )
+    insertRequest.run(
+      "parent-request",
+      "parent-source",
+      "parent-key",
+      rootFile,
+      "trace-root",
+      runKeys.get("parent"),
+      "2026-01-01T00:00:03.000Z",
+      10,
+      0.1,
+      2_000,
+      "self"
+    )
+    insertRequest.run(
+      "child-request",
+      "child-source",
+      "child-key",
+      childFile,
+      "trace-child",
+      runKeys.get("child"),
+      "2026-01-01T00:00:04.000Z",
+      20,
+      0.2,
+      1_000,
+      "self"
+    )
+    insertRequest.run(
+      "duplicate-request",
+      "duplicate-source",
+      "parent-key",
+      childFile,
+      "trace-child",
+      runKeys.get("parent"),
+      "2026-01-01T00:00:03.000Z",
+      999,
+      9.99,
+      2_000,
+      "self"
+    )
+    insertRequest.run(
+      "unassigned-request",
+      "unassigned-source",
+      "unassigned-key",
+      rootFile,
+      "trace-root",
+      null,
+      "2026-01-01T00:00:05.000Z",
+      5,
+      0.05,
+      0,
+      "unassigned"
+    )
+    db.prepare(
+      `INSERT INTO tool_calls (
+        id, source_key, file_path, session_id, cwd, name, provider, model,
+        started_at, duration_ms, is_error, agent_run_key
+      ) VALUES ('tool', 'tool-source', ?, 'trace-child', '/work/project',
+        'bash', 'openai', 'gpt', '2026-01-01T00:00:03.000Z', 500, 1, ?)`
+    ).run(childFile, runKeys.get("child"))
+
+    expect(
+      db.prepare("SELECT COUNT(*) FROM unique_tool_calls").pluck().get()
+    ).toBe(1)
+    expect(
+      db
+        .prepare(
+          "SELECT COUNT(*) FROM unique_tool_calls AS tool JOIN sessions AS owner ON owner.file_path = tool.file_path WHERE owner.accounting_session_id = ? AND tool.project = ?"
+        )
+        .pluck()
+        .get("trace-root", "/work/project")
+    ).toBe(1)
+    const trace = getSessionTrace(db, "trace-root", "/work/project")
+    expect(trace).not.toBeNull()
+    expect(trace?.session).toMatchObject({
+      name: "Trace root",
+      requests: 2,
+      tokens: 30,
+      durationMs: 5_000,
+    })
+    expect(trace?.session.cost).toBeCloseTo(0.3)
+    expect(trace?.bounds).toEqual({
+      startedAt: "2026-01-01T00:00:00.000Z",
+      endedAt: "2026-01-01T00:00:05.000Z",
+    })
+    expect(trace?.spans.filter((span) => span.kind === "request")).toHaveLength(
+      3
+    )
+    expect(trace?.spans.find((span) => span.label === "gpt")?.startedAt).toBe(
+      "2026-01-01T00:00:01.000Z"
+    )
+    expect(
+      trace?.spans.map((span) => [span.kind, span.label, span.depth])
+    ).toEqual([
+      ["agent", "parent", 0],
+      ["request", "gpt", 1],
+      ["agent", "child", 1],
+      ["request", "gpt", 2],
+      ["tool", "bash", 2],
+      ["request", "gpt", 0],
+      ["agent", "untimed", 0],
+    ])
+    expect(trace?.spans.find((span) => span.label === "untimed")).toMatchObject(
+      { startedAt: null, durationMs: null }
+    )
+    expect(
+      trace?.spans.find((span) => span.id.includes("unassigned-request"))
+        ?.includedInSessionTotal
+    ).toBe(false)
+    expect(getSessionTrace(db, "trace-root", "/work/other")).toBeNull()
+
+    db.prepare(
+      `INSERT INTO hidden_models (provider, model, hidden_at) VALUES
+        ('openai', 'gpt', '2026-01-02T00:00:00.000Z'),
+        ('openai', 'gpt-child', '2026-01-02T00:00:00.000Z')`
+    ).run()
+    expect(getSessionTrace(db, "trace-root", "/work/project")).toMatchObject({
+      session: { requests: 0, tokens: 0, cost: 0 },
+      spans: [],
+    })
+
+    db.prepare(
+      `INSERT INTO sessions (
+        file_path, session_id, cwd, name, started_at, parent_session,
+        accounting_session_id
+      ) VALUES (
+        '/sessions/cross.jsonl', 'cross-root', '/work/root', 'Cross root',
+        '2026-01-01T00:00:00.000Z', NULL, 'cross-root'
+      )`
+    ).run()
+    db.prepare(
+      `INSERT INTO requests (
+        id, source_key, request_key, file_path, session_id,
+        accounting_session_id, cwd, timestamp, provider, model, input_tokens,
+        output_tokens, cache_read_tokens, cache_write_tokens, total_tokens,
+        cost, is_error, duration_ms, usage_scope
+      ) VALUES (
+        'cross-request', 'cross-source', 'cross-key',
+        '/sessions/cross.jsonl', 'cross-root', 'cross-root', '/work/cross',
+        '2026-01-01T00:00:01.000Z', 'openai', 'gpt', 1, 1, 0, 0, 2,
+        0.01, 0, 1000, 'self'
+      )`
+    ).run()
+    expect(getSessionTrace(db, "cross-root", "/work/cross")).toMatchObject({
+      session: { requests: 0, tokens: 0, cost: 0 },
+      spans: [],
+    })
+    db.close()
+  })
+
+  it("utilise la fin connue d'un agent sans inventer son début", () => {
+    const db = createDatabase(":memory:")
+    const rootFile = "/sessions/completed-only.jsonl"
+    const otherRootFile = "/sessions/completed-only-other.jsonl"
+    const insertSession = db.prepare(
+      "INSERT INTO sessions (file_path, session_id, cwd, name, started_at, parent_session, accounting_session_id) VALUES (?, 'completed-only', ?, 'Root', '2026-01-01T00:00:00.000Z', NULL, 'completed-only')"
+    )
+    insertSession.run(rootFile, "/work/project")
+    insertSession.run(otherRootFile, "/work/other")
+
+    const visible = normalizedObservation({
+      id: "visible",
+      sourcePath: rootFile,
+      rootId: "completed-only",
+      sourceEntryId: "visible-entry",
+      startedAt: null,
+      completedAt: "2026-01-01T00:30:00.000Z",
+    })
+    visible.modelId = "visible-model"
+    const hidden = normalizedObservation({
+      id: "hidden",
+      sourcePath: rootFile,
+      rootId: "completed-only",
+      sourceEntryId: "hidden-entry",
+      startedAt: null,
+      completedAt: "2026-01-01T00:45:00.000Z",
+    })
+    hidden.modelId = "hidden-model"
+    const otherProject = normalizedObservation({
+      id: "other-project",
+      sourcePath: otherRootFile,
+      rootId: "completed-only",
+      sourceEntryId: "other-project-entry",
+      startedAt: null,
+      completedAt: "2026-01-01T01:00:00.000Z",
+    })
+    otherProject.modelId = "other-model"
+    replaceAgentObservations(db, rootFile, [visible, hidden])
+    replaceAgentObservations(db, otherRootFile, [otherProject])
+    reconcileAgentRuns(db)
+    db.prepare(
+      "INSERT INTO hidden_models (provider, model, hidden_at) VALUES ('openai', 'hidden-model', '2026-01-02T00:00:00.000Z')"
+    ).run()
+
+    const trace = getSessionTrace(db, "completed-only", "/work/project")
+    expect(trace?.session).toMatchObject({ durationMs: 30 * 60 * 1_000 })
+    expect(trace?.bounds).toEqual({
+      startedAt: "2026-01-01T00:00:00.000Z",
+      endedAt: "2026-01-01T00:30:00.000Z",
+    })
+    expect(trace?.spans).toHaveLength(1)
+    expect(trace?.spans[0]).toMatchObject({
+      label: "worker",
+      model: "visible-model",
+      startedAt: null,
+      durationMs: null,
+    })
+    db.close()
+  })
+
+  it("ne recompte pas un agent lié seulement par une copie non canonique", () => {
+    const db = createDatabase(":memory:")
+    const rootFile = "/sessions/dedup-root.jsonl"
+    const childFile = "/sessions/dedup-child.jsonl"
+    const insertSession = db.prepare(
+      "INSERT INTO sessions (file_path, session_id, cwd, name, started_at, parent_session, accounting_session_id, session_kind) VALUES (?, ?, '/work/project', ?, '2026-01-01T00:00:00.000Z', ?, 'dedup-root', ?)"
+    )
+    insertSession.run(rootFile, "dedup-root", "Root", null, "root")
+    insertSession.run(childFile, "dedup-child", null, rootFile, "agent")
+    const observation = normalizedObservation({
+      id: "copied-agent",
+      sourcePath: rootFile,
+      rootId: "dedup-root",
+      sourceEntryId: "copied-entry",
+    })
+    observation.displayName = "copied-agent"
+    observation.sessionFile = childFile
+    replaceAgentObservations(db, rootFile, [observation])
+    reconcileAgentRuns(db)
+    const runKey = String(
+      db.prepare("SELECT run_key FROM agent_runs").pluck().get()
+    )
+    const insertRequest = db.prepare(
+      `INSERT INTO requests (
+        id, source_key, request_key, file_path, session_id,
+        accounting_session_id, agent_run_key, cwd, timestamp, provider, model,
+        input_tokens, output_tokens, cache_read_tokens, cache_write_tokens,
+        total_tokens, cost, is_error, duration_ms, usage_scope
+      ) VALUES (?, ?, 'shared-key', ?, ?, 'dedup-root', ?, '/work/project',
+        '2026-01-01T00:00:01.000Z', 'openai', 'gpt', 5, 5, 0, 0, 10,
+        0.1, 0, 1000, 'self')`
+    )
+    insertRequest.run(
+      "canonical",
+      "canonical-source",
+      rootFile,
+      "dedup-root",
+      null
+    )
+    insertRequest.run(
+      "copied",
+      "copied-source",
+      childFile,
+      "dedup-child",
+      runKey
+    )
+
+    const trace = getSessionTrace(db, "dedup-root", "/work/project")
+    expect(trace?.session).toMatchObject({ requests: 1, tokens: 10, cost: 0.1 })
+    expect(trace?.spans.filter((span) => span.kind === "request")).toHaveLength(
+      1
+    )
+    expect(trace?.spans.filter((span) => span.kind === "agent")).toEqual([])
+    db.close()
   })
 })

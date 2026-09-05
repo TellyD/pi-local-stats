@@ -7,6 +7,9 @@ import type {
   SessionsResponse,
   StatsFilters,
 } from "./types.ts"
+import { nullableNumber, numeric, projectLabel } from "./stats-values.ts"
+
+export { getSessionTrace } from "./session-trace.ts"
 
 const sessionOrderBy: Record<SessionSortKey, string> = {
   name: "COALESCE(NULLIF(name, ''), id) COLLATE NOCASE",
@@ -17,13 +20,6 @@ const sessionOrderBy: Record<SessionSortKey, string> = {
   tokens: "tokens",
   cost: "cost",
 }
-
-const numeric = (value: unknown): number =>
-  typeof value === "number" ? value : Number(value ?? 0)
-const nullableNumber = (value: unknown): number | null =>
-  value === null || value === undefined ? null : numeric(value)
-const projectLabel = (project: string): string =>
-  project.split(/[/\\]/).filter(Boolean).at(-1) || project
 
 function where(
   filters: StatsFilters,

@@ -10,9 +10,11 @@ import {
   dashboardSearchForPage,
   filtersFromSearch,
   sessionPageFromSearch,
+  sessionTraceFromSearch,
   sessionsRequestSearch,
   withFilter,
   withSessionPage,
+  withSessionTrace,
 } from "../src/lib/dashboard-url.ts"
 
 const labels = {
@@ -60,7 +62,7 @@ describe("dashboard navigation", () => {
   it("cleans session-only parameters from non-session URLs", () => {
     expect(
       dashboardSearchForPage(
-        "?range=30d&page=2&sort=cost&direction=asc",
+        "?range=30d&page=2&sort=cost&direction=asc&sessionId=root&sessionProject=pi",
         "tools"
       )
     ).toBe("?range=30d")
@@ -98,6 +100,16 @@ describe("dashboard navigation", () => {
       sort: "startedAt",
       direction: "desc",
     })
+    expect(
+      sessionTraceFromSearch(
+        new URLSearchParams(
+          "sessionId=root%2Fone&sessionProject=%2Fwork%2Fpi%20stats"
+        )
+      )
+    ).toEqual({ id: "root/one", project: "/work/pi stats" })
+    expect(
+      sessionTraceFromSearch(new URLSearchParams("sessionId=root"))
+    ).toBeNull()
   })
 
   it("keys session responses by filters as well as pagination", () => {
@@ -132,7 +144,18 @@ describe("dashboard navigation", () => {
       "range=7d&project=pi&provider=openai&page=2&sort=tokens&direction=asc"
     )
 
-    expect(withFilter(paged, "range", "all").has("range")).toBe(false)
+    const traced = withSessionTrace(paged, {
+      id: "root/one",
+      project: "/work/pi stats",
+    })
+    expect(traced.get("sessionId")).toBe("root/one")
+    expect(traced.get("sessionProject")).toBe("/work/pi stats")
+    expect(withSessionTrace(traced, null).toString()).toBe(paged.toString())
+
+    const changedFilter = withFilter(traced, "range", "all")
+    expect(changedFilter.has("range")).toBe(false)
+    expect(changedFilter.has("sessionId")).toBe(false)
+    expect(changedFilter.has("sessionProject")).toBe(false)
   })
 
   it("removes the access token before the router reads the URL", () => {

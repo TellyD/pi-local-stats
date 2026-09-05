@@ -1,5 +1,6 @@
 import type { SqliteDatabase } from "./database.ts"
-export { getSessions } from "./session-stats.ts"
+import { numeric, projectLabel } from "./stats-values.ts"
+export { getSessions, getSessionTrace } from "./session-stats.ts"
 import type {
   SessionPageOptions,
   SessionSortKey,
@@ -18,10 +19,6 @@ const sessionSortKeys: SessionSortKey[] = [
   "tokens",
   "cost",
 ]
-const numeric = (value: unknown): number =>
-  typeof value === "number" ? value : Number(value ?? 0)
-const projectLabel = (project: string): string =>
-  project.split(/[/\\]/).filter(Boolean).at(-1) || project
 const ratio = (numerator: number, denominator: number): number =>
   denominator ? numerator / denominator : 0
 

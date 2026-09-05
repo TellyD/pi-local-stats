@@ -10,6 +10,8 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+playwright-report
+visual-output
 *.local
 .env
 .env.*
@@ -31,3 +33,4 @@ AGENTS.md
 *.sln
 *.sw?
 .pi/skills/*
+.empryo

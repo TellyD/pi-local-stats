@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   SessionAgents,
   SessionsTable,
-} from "../src/components/dashboard/DataPanels.tsx"
+} from "../src/components/dashboard/SessionsTable.tsx"
 import { I18nProvider } from "../src/lib/i18n.tsx"
 import type { SessionSummary } from "../server/types.ts"
 
@@ -45,10 +45,12 @@ describe("SessionAgents", () => {
           isLoading={false}
           onPageChange={() => undefined}
           onSortChange={() => undefined}
+          onOpenTrace={() => undefined}
         />
       </I18nProvider>
     )
 
+    expect(markup).toContain('aria-label="Analyze Root"')
     expect(markup).toContain("Show accounting details")
   })
 

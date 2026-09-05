@@ -38,8 +38,10 @@ import {
   dashboardSearchForPage,
   filtersFromSearch,
   sessionPageFromSearch,
+  sessionTraceFromSearch,
   withFilter,
   withSessionPage,
+  withSessionTrace,
 } from "@/lib/dashboard-url"
 import { catalogs, resolveLanguage, useI18n } from "@/lib/i18n"
 import type {
@@ -136,6 +138,10 @@ export function App() {
     () => sessionPageFromSearch(searchParams),
     [searchParams]
   )
+  const traceSelection = useMemo(
+    () => sessionTraceFromSearch(searchParams),
+    [searchParams]
+  )
   const navigationLabels = {
     overview: t.overview,
     costs: t.costs,
@@ -179,7 +185,11 @@ export function App() {
     sync,
     hideModel,
     showModel,
-  } = useStats(filters, sessionPage, currentPage?.id === "sessions")
+  } = useStats(
+    filters,
+    sessionPage,
+    currentPage?.id === "sessions" && !traceSelection
+  )
 
   useEffect(() => {
     if (
@@ -318,56 +328,62 @@ export function App() {
             </div>
           </header>
 
-          <Card size="sm" className="bg-card/90 backdrop-blur">
-            <CardContent className="flex flex-wrap items-center gap-2">
-              <FilterSelect
-                className="sm:w-48"
-                label={t.period}
-                value={filters.range}
-                includeAll={false}
-                onChange={(value) => updateFilter("range", value as StatsRange)}
-                options={Object.entries(rangeLabels).map(([value, label]) => ({
-                  value,
-                  label,
-                }))}
-              />
-              <FilterSelect
-                className="sm:w-48"
-                label={t.allProjects}
-                value={filters.project}
-                onChange={(value) => updateFilter("project", value)}
-                options={data?.options.projects ?? []}
-              />
-              <FilterSelect
-                className="sm:w-48"
-                label={t.allProviders}
-                value={filters.provider}
-                onChange={(value) => updateFilter("provider", value)}
-                options={(data?.options.providers ?? []).map((value) => ({
-                  value,
-                  label: value,
-                }))}
-              />
-              <FilterSelect
-                className="sm:w-48"
-                label={t.allModels}
-                value={filters.model}
-                onChange={(value) => updateFilter("model", value)}
-                options={(data?.options.models ?? []).map((value) => ({
-                  value,
-                  label: value,
-                }))}
-              />
-              <span className="ml-auto hidden font-mono text-xs text-muted-foreground lg:inline">
-                {data
-                  ? t.indexSummary(
-                      format.number(data.meta.indexedSessions),
-                      data.meta.indexedSessions
-                    )
-                  : t.readingIndex}
-              </span>
-            </CardContent>
-          </Card>
+          {currentPage.id !== "sessions" || !traceSelection ? (
+            <Card size="sm" className="bg-card/90 backdrop-blur">
+              <CardContent className="flex flex-wrap items-center gap-2">
+                <FilterSelect
+                  className="sm:w-48"
+                  label={t.period}
+                  value={filters.range}
+                  includeAll={false}
+                  onChange={(value) =>
+                    updateFilter("range", value as StatsRange)
+                  }
+                  options={Object.entries(rangeLabels).map(
+                    ([value, label]) => ({
+                      value,
+                      label,
+                    })
+                  )}
+                />
+                <FilterSelect
+                  className="sm:w-48"
+                  label={t.allProjects}
+                  value={filters.project}
+                  onChange={(value) => updateFilter("project", value)}
+                  options={data?.options.projects ?? []}
+                />
+                <FilterSelect
+                  className="sm:w-48"
+                  label={t.allProviders}
+                  value={filters.provider}
+                  onChange={(value) => updateFilter("provider", value)}
+                  options={(data?.options.providers ?? []).map((value) => ({
+                    value,
+                    label: value,
+                  }))}
+                />
+                <FilterSelect
+                  className="sm:w-48"
+                  label={t.allModels}
+                  value={filters.model}
+                  onChange={(value) => updateFilter("model", value)}
+                  options={(data?.options.models ?? []).map((value) => ({
+                    value,
+                    label: value,
+                  }))}
+                />
+                <span className="ml-auto hidden font-mono text-xs text-muted-foreground lg:inline">
+                  {data
+                    ? t.indexSummary(
+                        format.number(data.meta.indexedSessions),
+                        data.meta.indexedSessions
+                      )
+                    : t.readingIndex}
+                </span>
+              </CardContent>
+            </Card>
+          ) : null}
         </div>
       </div>
 
@@ -422,12 +438,23 @@ export function App() {
                     sessionPage={sessionPage}
                     rangeLabel={rangeLabels[filters.range]}
                     isLoading={isSessionsLoading}
+                    traceSelection={traceSelection}
                     onPageChange={(page) =>
                       setSearchParams((current) =>
                         withSessionPage(current, { page })
                       )
                     }
                     onSortChange={updateSessionSort}
+                    onOpenTrace={(selection) =>
+                      setSearchParams((current) =>
+                        withSessionTrace(current, selection)
+                      )
+                    }
+                    onCloseTrace={() =>
+                      setSearchParams((current) =>
+                        withSessionTrace(current, null)
+                      )
+                    }
                   />
                 }
               />

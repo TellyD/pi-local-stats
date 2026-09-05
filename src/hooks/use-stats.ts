@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
 import { useI18n } from "@/lib/i18n"
-import { sessionsRequestSearch, statsRequestSearch } from "@/lib/dashboard-url"
+import {
+  sessionsRequestSearch,
+  statsRequestSearch,
+  type SessionTraceSelection,
+} from "@/lib/dashboard-url"
 import type {
   HideModelResult,
   SessionPageOptions,
+  SessionTraceResponse,
   SessionsResponse,
   ShowModelResult,
   StatsFilters,
@@ -50,6 +55,73 @@ async function request<T>(
   if (!response.ok) throw new Error(failureMessage(response.status))
 
   return (await response.json()) as T
+}
+
+export function useSessionTrace(
+  selection: SessionTraceSelection | null,
+  refreshKey: string | null | undefined
+) {
+  const { messages: t } = useI18n()
+  const [token] = useState(consumeAccessToken)
+  const sessionId = selection?.id ?? null
+  const sessionProject = selection?.project ?? null
+  const selectionKey = selection ? JSON.stringify(selection) : null
+  const [state, setState] = useState<{
+    key: string
+    data: SessionTraceResponse | null
+    error: string | null
+    isLoading: boolean
+  } | null>(null)
+
+  useEffect(() => {
+    if (selectionKey === null || sessionId === null || sessionProject === null)
+      return
+
+    const controller = new AbortController()
+    const search = new URLSearchParams({
+      id: sessionId,
+      project: sessionProject,
+    })
+    void Promise.resolve().then(async () => {
+      if (controller.signal.aborted) return
+      setState((previous) => ({
+        key: selectionKey,
+        data: previous?.key === selectionKey ? previous.data : null,
+        error: null,
+        isLoading: true,
+      }))
+      try {
+        const data = await request<SessionTraceResponse>(
+          `/api/session-trace?${search}`,
+          token,
+          t.requestFailed,
+          { signal: controller.signal }
+        )
+        if (!controller.signal.aborted)
+          setState({
+            key: selectionKey,
+            data,
+            error: null,
+            isLoading: false,
+          })
+      } catch (cause) {
+        if (cause instanceof DOMException && cause.name === "AbortError") return
+        if (!controller.signal.aborted)
+          setState({
+            key: selectionKey,
+            data: null,
+            error: cause instanceof Error ? cause.message : t.statsUnavailable,
+            isLoading: false,
+          })
+      }
+    })
+
+    return () => controller.abort()
+  }, [refreshKey, selectionKey, sessionId, sessionProject, t, token])
+
+  return selectionKey && state?.key === selectionKey
+    ? state
+    : { data: null, error: null, isLoading: selectionKey !== null }
 }
 
 export function useStats(
