@@ -7,6 +7,12 @@ export interface TraceLane {
   depth: number
 }
 
+export interface TraceLaneGroup {
+  id: string
+  label: string
+  lanes: TraceLane[]
+}
+
 export interface ActivityBucket {
   index: number
   requests: number
@@ -31,6 +37,22 @@ export interface TraceScale {
 }
 
 export const ACTIVITY_BUCKET_COUNT = 64
+
+/** Center a mark in the visible track, excluding the sticky lane label. */
+export function scrollTraceMarkIntoView(
+  viewport: HTMLElement,
+  mark: HTMLElement
+) {
+  const rect = mark.getBoundingClientRect()
+  const labelWidth =
+    mark.parentElement?.previousElementSibling?.getBoundingClientRect().width ??
+    0
+  viewport.scrollLeft +=
+    rect.left +
+    rect.width / 2 -
+    (viewport.getBoundingClientRect().left +
+      (viewport.clientWidth + labelWidth) / 2)
+}
 
 export function buildTraceLanes(spans: SessionTraceSpan[]): TraceLane[] {
   const agents = spans.filter((span) => span.kind === "agent")
@@ -57,6 +79,68 @@ export function buildTraceLanes(spans: SessionTraceSpan[]): TraceLane[] {
       depth: agent.depth,
     })
   return lanes
+}
+
+export function groupTraceLanes(
+  lanes: TraceLane[]
+): Array<TraceLane | TraceLaneGroup> {
+  const groups = new Map<string, TraceLaneGroup>()
+  for (const lane of lanes) {
+    if (!lane.agent) continue
+    const label = lane.agent.agentType?.trim() || lane.agent.label
+    const group = groups.get(label) ?? {
+      id: `group:${label}`,
+      label,
+      lanes: [],
+    }
+    group.lanes.push(lane)
+    groups.set(label, group)
+  }
+  return [...lanes.filter((lane) => !lane.agent), ...groups.values()]
+}
+
+/** Pack bars on the shared scale, reserving room for the 6px minimum mark. */
+export function layoutAgentGroup(lanes: TraceLane[], scale: TraceScale) {
+  const ends: number[] = []
+  return lanes
+    .map((lane) => {
+      const agent = lane.agent!
+      const start = Date.parse(agent.startedAt ?? "")
+      const timed = Number.isFinite(start) && agent.durationMs !== null
+      // The narrowest track is 831px (64rem timeline minus 12rem labels/border).
+      // 0.8% covers a 6px mark even at that width, including at the right edge.
+      const left = timed ? Math.min(99.2, scale.position(start)) : 0
+      const right = timed
+        ? Math.max(
+            left + 0.8,
+            scale.position(start + Math.max(0, agent.durationMs!))
+          )
+        : 100
+      return { lane, left, right, timed }
+    })
+    .sort((a, b) => Number(b.timed) - Number(a.timed) || a.left - b.left)
+    .map(({ lane, left, right, timed }) => {
+      let row = ends.findIndex((end) => left >= end + 0.25)
+      if (row === -1) row = ends.length
+      ends[row] = right
+      return { lane, row, timed }
+    })
+}
+
+/** Match the trace's accounting sources, never add unassigned request copies. */
+export function laneTokens(lane: TraceLane): number | null {
+  const values = [
+    ...(lane.agent?.includedInSessionTotal === true ? [lane.agent.tokens] : []),
+    ...lane.events
+      .filter(
+        (span) =>
+          span.kind === "request" && span.includedInSessionTotal === true
+      )
+      .map((span) => span.tokens),
+  ].filter((tokens): tokens is number => tokens !== null)
+  return values.length
+    ? values.reduce((total, tokens) => total + tokens, 0)
+    : null
 }
 
 /** An agent counted in the session total whose tokens are known but whose cost could not be priced. */

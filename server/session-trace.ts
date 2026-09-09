@@ -147,6 +147,7 @@ export function getSessionTrace(
       label: String(
         row.display_name ?? row.agent_type ?? row.native_id ?? "Agent"
       ),
+      agentType: row.agent_type == null ? null : String(row.agent_type),
       startedAt: startedMs === null ? null : new Date(startedMs).toISOString(),
       durationMs,
       provider: row.provider == null ? null : String(row.provider),

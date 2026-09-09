@@ -16,6 +16,18 @@ export function createFormatters(locale = "en-US"): Formatters {
   const preciseNumber = new Intl.NumberFormat(locale, {
     maximumFractionDigits: 1,
   })
+  const hours = new Intl.NumberFormat(locale, {
+    style: "unit",
+    unit: "hour",
+    unitDisplay: "short",
+    maximumFractionDigits: 1,
+  })
+  const days = new Intl.NumberFormat(locale, {
+    style: "unit",
+    unit: "day",
+    unitDisplay: "short",
+    maximumFractionDigits: 1,
+  })
   const currency = new Intl.NumberFormat(locale, {
     style: "currency",
     currency: "USD",
@@ -51,7 +63,10 @@ export function createFormatters(locale = "en-US"): Formatters {
       if (!Number.isFinite(value) || value <= 0) return "—"
       if (value < 1_000) return `${Math.round(value)} ms`
       if (value < 60_000) return `${preciseNumber.format(value / 1_000)} s`
-      return `${preciseNumber.format(value / 60_000)} min`
+      if (value < 3_600_000)
+        return `${preciseNumber.format(value / 60_000)} min`
+      if (value < 86_400_000) return hours.format(value / 3_600_000)
+      return days.format(value / 86_400_000)
     },
     dateTime: (value, seconds = false) => {
       const date = new Date(value)

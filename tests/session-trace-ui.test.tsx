@@ -7,6 +7,9 @@ import {
   buildTraceScale,
   laneAccountedCost,
   laneCostUnknown,
+  groupTraceLanes,
+  layoutAgentGroup,
+  laneTokens,
 } from "../src/lib/session-trace.ts"
 import { SessionTrace } from "../src/components/dashboard/SessionTrace.tsx"
 import { I18nProvider } from "../src/lib/i18n.tsx"
@@ -213,12 +216,12 @@ describe("SessionTrace", () => {
   it("nomme l’absence de données d’usage sur un agent sans tokens ni coût", () => {
     const markup = renderTrace(trace)
     const reviewerLane = markup.slice(
-      markup.indexOf('data-lane-id="agent:untimed"')
+      markup.indexOf('data-agent-group="reviewer"')
     )
     expect(reviewerLane).toContain("Usage details unavailable")
     const rootLane = markup.slice(
       markup.indexOf('data-lane-id="root"'),
-      markup.indexOf('data-lane-id="agent:parent"')
+      markup.indexOf('data-agent-group="worker"')
     )
     expect(rootLane).not.toContain("Usage details unavailable")
   })
@@ -238,7 +241,7 @@ describe("SessionTrace", () => {
     expect(markup).not.toContain("errors total")
   })
 
-  it("rend une timeline hiérarchique accessible avec erreurs et usage exclu", () => {
+  it("rend une timeline regroupée accessible avec erreurs et usage exclu", () => {
     const markup = renderTrace(trace)
 
     expect(markup).toContain("1 failed tool call")
@@ -248,20 +251,16 @@ describe("SessionTrace", () => {
     expect(markup).toContain("Hide timeline")
     expect(markup).toMatch(/<details[^>]* open=""/)
     expect(markup).toContain('aria-label="Back to sessions"')
-    expect(markup).toContain(
-      'aria-label="Agent · worker · 10 s" aria-pressed="false"'
-    )
+    expect(markup).toContain('aria-label="Agent · worker · 10 s · 20 tokens"')
     expect(markup).not.toContain('aria-label="Tool · bash · — · Error"')
     expect(markup).toContain(
       'aria-label="Request · gpt · — · Not included in the session total" aria-pressed="false"'
     )
     expect(buildTraceLanes(trace.spans)).toHaveLength(3)
     expect(markup.match(/grid min-h-14/g)).toHaveLength(3)
-    expect(markup).toContain("1 request · 1 tool")
     expect(markup).toContain("1 request · 0 tools")
-    expect(markup).toContain(
-      'aria-label="Agent · worker · 10 s · Inspect 2 events in worker"'
-    )
+    expect(markup).toContain('aria-label="Expand worker · 1 agent"')
+    expect(markup).toContain('aria-expanded="false"')
     expect(markup).toContain("width:max(6px,")
     expect(markup).toContain("bg-destructive")
     expect(markup).toContain("Not included in the session total")
@@ -298,9 +297,9 @@ describe("SessionTrace", () => {
         spans: [trace.spans[0]!, ...spans],
       })
       expect(markup.match(/data-trace-mark=""/g)).toHaveLength(1)
-      expect(markup).toContain(`${count / 2} requests · ${count / 2} tools`)
-      expect(markup).toContain(
-        `aria-label="Agent · worker · 10 s · Inspect ${count} events in worker"`
+      expect(markup).toContain('aria-label="Expand worker · 1 agent"')
+      expect(laneTokens(buildTraceLanes([trace.spans[0]!, ...spans])[0]!)).toBe(
+        (count / 2) * 20
       )
       expect(markup).not.toContain(">1 error</span>")
       expect(markup).not.toContain(">Failed</span>")
@@ -309,7 +308,71 @@ describe("SessionTrace", () => {
     }
   )
 
-  it("limite les agents visibles avant exploration explicite", () => {
+  it("garde le type, le compteur et les tokens pour une exécution unique au nom personnalisé", () => {
+    const agent = {
+      ...trace.spans[0]!,
+      label: "scan-api",
+      agentType: "scout",
+      tokens: 1200,
+      cost: 0.2,
+      includedInSessionTotal: true,
+    }
+    const markup = renderTrace({ ...trace, spans: [agent] })
+    expect(groupTraceLanes(buildTraceLanes([agent]))).toMatchObject([
+      { label: "scout", lanes: [{ agent }] },
+    ])
+    expect(markup).toContain('aria-label="Expand scout · 1 agent"')
+    expect(markup).toContain("× 1")
+    expect(markup).toContain("1.2K tokens")
+    expect(markup).toContain("$0.20 · 100%")
+    expect(markup).toContain(
+      'aria-label="Agent · scan-api · 10 s · 1.2K tokens"'
+    )
+  })
+
+  it("calcule la part des tokens connus avec la session principale, sans copies exclues", () => {
+    const markup = renderTrace({
+      ...trace,
+      spans: [
+        ...trace.spans,
+        { ...trace.spans[1]!, id: "root:usage", parentId: null, tokens: 80 },
+        { ...trace.spans[0]!, id: "worker:unknown" },
+        {
+          ...trace.spans[0]!,
+          id: "oracle",
+          label: "oracle",
+          tokens: 100,
+          cost: null,
+          includedInSessionTotal: true,
+        },
+      ],
+    })
+    expect(markup).toContain("20 tokens · 10%")
+    expect(markup).toContain("100 tokens · 50%")
+    expect(markup).toContain(
+      "Share of known session tokens, including the main session and agents. Missing usage is excluded."
+    )
+    expect(markup).toContain("Usage unavailable for 1 agent")
+    expect(markup).not.toContain("Usage details unavailable ·")
+    expect(markup).toContain("cost percentages are not shown")
+  })
+
+  it.each([null, 0])(
+    "n’invente pas de pourcentage quand le total connu est nul (%s)",
+    (tokens) => {
+      const markup = renderTrace({
+        ...trace,
+        session: { ...trace.session, cost: 0 },
+        spans: [{ ...trace.spans[0]!, tokens, includedInSessionTotal: true }],
+      })
+      expect(markup.replace(/<[^>]*>/g, "")).not.toContain("%")
+      expect(markup).not.toContain("Share of known session tokens")
+      expect(markup).not.toContain("NaN")
+      expect(markup).not.toContain("Infinity")
+    }
+  )
+
+  it("regroupe toutes les exécutions d’un type sans masquer les agents suivants", () => {
     const manyAgents: SessionTraceResponse = {
       ...trace,
       spans: [
@@ -323,9 +386,116 @@ describe("SessionTrace", () => {
     const markup = renderTrace(manyAgents)
 
     expect(buildTraceLanes(manyAgents.spans)).toHaveLength(13)
-    expect(markup.match(/grid min-h-14/g)).toHaveLength(9)
-    expect(markup).toContain("Show 4 more agents")
+    expect(markup.match(/grid min-h-14/g)).toHaveLength(2)
+    expect(markup.match(/data-agent-id=/g)).toHaveLength(12)
+    expect(markup).toContain('aria-label="Expand worker · 12 agents"')
     expect(markup).toContain('aria-expanded="false"')
+    expect(markup).not.toContain("more agents")
+  })
+
+  it("regroupe par type réel malgré les noms personnalisés, sans perdre la filiation", () => {
+    const spans = [
+      { ...trace.spans[0]!, agentType: "scout", label: "scan-api" },
+      {
+        ...trace.spans[0]!,
+        id: "nested",
+        parentId: "agent:parent",
+        depth: 1,
+        agentType: "scout",
+        label: "scan-ui",
+      },
+      trace.spans[1]!,
+      trace.spans[4]!,
+    ]
+    const lanes = buildTraceLanes(spans)
+    const rows = groupTraceLanes(lanes)
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toMatchObject({
+      label: "scout",
+      lanes: [lanes[0], lanes[1]],
+    })
+    expect(lanes[1]!.agent!.parentId).toBe("agent:parent")
+    expect(lanes[1]!.depth).toBe(1)
+    expect(lanes[0]!.events).toEqual([trace.spans[1]])
+    const markup = renderTrace({ ...trace, spans })
+    expect(markup).toContain("Expand scout · 2 agents")
+    expect(markup).toContain("20 tokens")
+    expect(markup).toContain("Usage unavailable for 1 agent")
+  })
+
+  it("additionne les sources comptabilisées, pas les copies de requêtes exclues", () => {
+    const lane = buildTraceLanes(trace.spans).find(
+      (lane) => lane.agent?.label === "worker"
+    )!
+    expect(laneTokens(lane)).toBe(20)
+    expect(
+      laneTokens({
+        ...lane,
+        events: [...lane.events, { ...trace.spans[3]!, tokens: 999 }],
+      })
+    ).toBe(20)
+    expect(
+      laneTokens({
+        ...lane,
+        agent: { ...lane.agent!, tokens: 50, includedInSessionTotal: true },
+      })
+    ).toBe(70)
+    expect(
+      laneTokens({
+        ...lane,
+        events: [],
+        agent: { ...lane.agent!, tokens: 0, includedInSessionTotal: true },
+      })
+    ).toBe(0)
+    expect(laneTokens({ ...lane, events: [] })).toBeNull()
+    const markup = renderTrace({
+      ...trace,
+      spans: [
+        { ...trace.spans[0]!, tokens: 100, includedInSessionTotal: true },
+        {
+          ...trace.spans[0]!,
+          id: "second",
+          tokens: 200,
+          includedInSessionTotal: true,
+        },
+      ],
+    })
+    expect(markup).toContain("300 tokens")
+    expect(markup).toContain(
+      "The session total excludes 2 agents with 300 tokens but no priced cost"
+    )
+  })
+
+  it("empile les chevauchements et réutilise les sous-lignes pour les exécutions successives", () => {
+    const start = Date.parse(trace.bounds.startedAt)
+    const spans = [
+      [0, 2000],
+      [1000, 2000],
+      [4000, 1000],
+      [9999, 0],
+      [10000, 0],
+    ].map(([offset, duration], index) => ({
+      ...trace.spans[0]!,
+      id: `agent:${index}`,
+      startedAt: new Date(start + offset!).toISOString(),
+      durationMs: duration!,
+    }))
+    const lanes = buildTraceLanes([
+      ...spans,
+      { ...trace.spans[0]!, id: "untimed", startedAt: null, durationMs: null },
+    ])
+    const scale = buildTraceScale(spans, trace.bounds)
+    const layout = layoutAgentGroup(lanes, scale)
+    expect(layout.map((mark) => mark.row)).toEqual([0, 1, 0, 0, 1, 2])
+    expect(layout.at(-1)!.timed).toBe(false)
+    expect(layout.map((mark) => mark.lane.id)).toEqual(
+      lanes.map((lane) => lane.id)
+    )
+    expect(
+      layoutAgentGroup(lanes.toReversed(), scale)
+        .filter((mark) => mark.timed)
+        .map((mark) => mark.row)
+    ).toEqual([0, 1, 0, 0, 1])
   })
 
   it("compresse les longues périodes inactives sans perdre l’heure réelle", () => {

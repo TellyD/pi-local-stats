@@ -31,7 +31,7 @@ Then run `/stats` inside Pi.
 - Skill usage detected from `read` calls targeting `SKILL.md`, deduplicated per session
 - Navigable pages with direct links and native browser back/forward support
 - URL-backed filters, sorting, and session pagination
-- Per-session timelines with inspectable events and accounted costs per agent
+- Per-session timelines with expandable agent-type groups, token totals, overlapping runs, and inspectable events and costs
 - Separate request, tool, and agent failure filters, compressed gaps, and mobile timeline scrolling
 - Options to hide models or permanently delete their existing statistics history
 - English and French interface

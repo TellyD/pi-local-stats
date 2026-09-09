@@ -25,10 +25,9 @@ import {
   buildTraceLanes,
   buildTraceScale,
   laneCostUnknown,
+  scrollTraceMarkIntoView,
 } from "@/lib/session-trace"
 import type { SessionTraceResponse, SessionTraceSpan } from "@/types"
-
-const DEFAULT_AGENT_LANES = 8
 
 function TraceLegend({ spans }: { spans: SessionTraceSpan[] }) {
   const { messages: t } = useI18n()
@@ -179,7 +178,6 @@ export function SessionTrace({
       !window.matchMedia ||
       window.matchMedia("(min-width: 768px)").matches
   )
-  const [showAllAgents, setShowAllAgents] = useState(false)
   const detailsRef = useRef<HTMLElement>(null)
   const timelineRef = useRef<HTMLDivElement>(null)
 
@@ -189,30 +187,18 @@ export function SessionTrace({
     const mark = viewport?.querySelector<HTMLElement>(
       '[data-trace-mark][aria-pressed="true"]'
     )
-    if (viewport && mark) {
-      const rect = mark.getBoundingClientRect()
-      const labelWidth =
-        mark.parentElement?.previousElementSibling?.getBoundingClientRect()
-          .width ?? 0
-      viewport.scrollLeft +=
-        rect.left +
-        rect.width / 2 -
-        (viewport.getBoundingClientRect().left +
-          (viewport.clientWidth + labelWidth) / 2)
-    }
+    if (viewport && mark) scrollTraceMarkIntoView(viewport, mark)
     detailsRef.current?.scrollIntoView({ block: "nearest" })
   }, [selectedId, traceOpen])
 
   const clearFocus = () => {
     setFocus(null)
     setSelectedId(null)
-    setShowAllAgents(false)
   }
   const inspectEvents = (key: string, ids: string[]) => {
     if (focus?.key === key) return clearFocus()
     setFocus({ key, ids })
     setSelectedId(ids[0] ?? null)
-    setShowAllAgents(false)
     setTraceOpen(true)
   }
 
@@ -270,35 +256,12 @@ export function SessionTrace({
     spans: data.spans.filter((span) => span.kind === kind && span.isError),
   }))
   const highlightedIds = new Set(focusedSpans.map((span) => span.id))
-  const hasHighlights = highlightedIds.size > 0
   const unpricedLanes = lanes.filter(laneCostUnknown)
   const unpricedTokens = unpricedLanes.reduce(
     (total, lane) => total + (lane.agent?.tokens ?? 0),
     0
   )
   const costCoverageComplete = unpricedLanes.length === 0
-  const rootLanes = lanes.filter((lane) => !lane.agent)
-  const agentLanes = lanes.filter((lane) => lane.agent)
-  const focusedAgentLanes = agentLanes.filter(
-    (lane) =>
-      highlightedIds.has(lane.agent!.id) ||
-      lane.events.some((span) => highlightedIds.has(span.id))
-  )
-  const candidateAgentLanes = hasHighlights ? focusedAgentLanes : agentLanes
-  const visibleAgentLanes = showAllAgents
-    ? agentLanes
-    : candidateAgentLanes.slice(0, DEFAULT_AGENT_LANES)
-  const selectedLane =
-    selected &&
-    agentLanes.find(
-      (lane) =>
-        lane.agent!.id === selected.id ||
-        lane.events.some((span) => span.id === selected.id)
-    )
-  if (selectedLane && !visibleAgentLanes.includes(selectedLane))
-    visibleAgentLanes.push(selectedLane)
-  const visibleLanes = [...rootLanes, ...visibleAgentLanes]
-  const hiddenAgentCount = agentLanes.length - visibleAgentLanes.length
 
   return (
     <div className="flex flex-col gap-4">
@@ -514,7 +477,8 @@ export function SessionTrace({
                 ) : null}
                 <TraceTimeline
                   ref={timelineRef}
-                  visibleLanes={visibleLanes}
+                  key={`${data.session.project}:${data.session.id}`}
+                  visibleLanes={lanes}
                   scale={scale}
                   selected={selected}
                   highlightedIds={highlightedIds}
@@ -522,21 +486,6 @@ export function SessionTrace({
                   costCoverageComplete={costCoverageComplete}
                   onInspectEvents={inspectEvents}
                 />
-                {hiddenAgentCount > 0 || showAllAgents ? (
-                  <div className="border-t px-4 py-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="h-8 px-2 text-xs"
-                      aria-expanded={showAllAgents}
-                      onClick={() => setShowAllAgents((current) => !current)}
-                    >
-                      {showAllAgents
-                        ? t.showFewerAgents
-                        : t.showMoreAgents(hiddenAgentCount)}
-                    </Button>
-                  </div>
-                ) : null}
               </>
             </CardContent>
           </Card>

@@ -625,6 +625,7 @@ describe("getSessionTrace", () => {
       completedAt: null,
     })
     untimed.displayName = "untimed"
+    untimed.agentType = null
     untimed.usage = null
     replaceAgentObservations(db, rootFile, [parent, child, untimed])
     reconcileAgentRuns(db)
@@ -747,6 +748,18 @@ describe("getSessionTrace", () => {
       ["request", "gpt", 0],
       ["agent", "untimed", 0],
     ])
+    expect(
+      trace?.spans
+        .filter((span) => span.kind === "agent")
+        .map((span) => ({ label: span.label, agentType: span.agentType }))
+    ).toEqual([
+      { label: "parent", agentType: "worker" },
+      { label: "child", agentType: "worker" },
+      { label: "untimed", agentType: null },
+    ])
+    for (const span of trace!.spans.filter((span) => span.kind !== "agent")) {
+      expect(span).not.toHaveProperty("agentType")
+    }
     expect(trace?.spans.find((span) => span.label === "untimed")).toMatchObject(
       { startedAt: null, durationMs: null }
     )

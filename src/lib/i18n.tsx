@@ -130,7 +130,7 @@ const english = {
   hideRawTrace: "Hide timeline",
   evidenceTimeline: "Timeline",
   traceDescription:
-    "Select an agent’s bar, an activity group, or a lane’s event count to inspect its events.",
+    "Agents are grouped by type. Expand a group to see its runs; select a bar for details or an event count to inspect its events.",
   traceErrorsByType: "Failures by event type",
   traceRequestErrors: (count: number) =>
     `${count} failed ${count === 1 ? "request" : "requests"}`,
@@ -142,23 +142,28 @@ const english = {
   traceSelectedEvents: (count: number) => `${count} selected events`,
   traceEventList: "Events in selection",
   traceScrollableTimeline: "Scrollable timeline",
+  traceActivityLeft: "← Activity offscreen",
+  traceActivityRight: "Activity offscreen →",
   traceLaneEvents: (label: string, count: number) =>
     `Inspect ${count} events in ${label}`,
+  traceTokenShare:
+    "Share of known session tokens, including the main session and agents. Missing usage is excluded.",
   traceLaneCost: (label: string, cost: string, share: string | null) =>
     `Cost accounted to ${label}: ${cost}${share ? ` (${share} of the total)` : ""}`,
   traceLaneCostUnknown: (label: string) =>
     `${label} reports tokens but no priced cost; it counts as zero in the session total`,
   traceCostCoverage: (count: number, tokens: string) =>
-    `The session total excludes ${count} ${count === 1 ? "agent" : "agents"} with ${tokens} tokens but no priced cost, so shares of the total are not shown.`,
+    `The session total excludes ${count} ${count === 1 ? "agent" : "agents"} with ${tokens} tokens but no priced cost, so cost percentages are not shown.`,
   traceUntimedEvents: (count: number) => `${count} events without timing`,
   traceGap: "Gap without timed events; may be a pause or missing timing data",
   traceLegend: "Timeline legend",
   mainSession: "Pi session",
   idleTimeCompressed:
     "Unobserved gaps are compressed to keep activity readable",
-  showMoreAgents: (count: number) =>
-    `Show ${count} more ${count === 1 ? "agent" : "agents"}`,
-  showFewerAgents: "Show fewer agents",
+  traceAgentGroup: (label: string, count: number, expanded: boolean) =>
+    `${expanded ? "Collapse" : "Expand"} ${label} · ${count} ${count === 1 ? "agent" : "agents"}`,
+  traceMissingAgentUsage: (count: number) =>
+    `Usage unavailable for ${count} ${count === 1 ? "agent" : "agents"}`,
   activityBucket: (requests: number, tools: number, errors: number) => {
     const activity = `${requests} ${requests === 1 ? "request" : "requests"} · ${tools} ${tools === 1 ? "tool" : "tools"}`
     if (!errors) return activity
@@ -177,7 +182,7 @@ const english = {
   status: "Status",
   observedDuration: "Observed duration",
   observedDurationDetail:
-    "Elapsed time between the first and last observed event.",
+    "Elapsed time between the first and last observed event. Includes pauses, not just active work.",
   requestMetricDetail: "Model requests recorded in this session.",
   tokenMetricDetail: "Tokens accounted to this session.",
   costMetricDetail: "API-equivalent estimate from recorded usage.",
@@ -193,6 +198,7 @@ const english = {
     `${value} ${count === 1 ? "token" : "tokens"}`,
   agentUsageUnavailable: "Usage details unavailable",
   agentCostUnavailable: "Cost unavailable",
+  agentTokensUnavailable: "Tokens unavailable",
   agentPrecisionExact: "Exact",
   agentPrecisionReported: "Reported",
   agentPrecisionEstimated: "Estimated",
@@ -341,7 +347,7 @@ const french: Messages = {
   hideRawTrace: "Masquer la chronologie",
   evidenceTimeline: "Chronologie",
   traceDescription:
-    "Sélectionnez la barre d’un agent, un groupe d’activité ou le compteur d’une ligne pour consulter ses événements.",
+    "Les agents sont regroupés par type. Dépliez un groupe pour voir ses exécutions ; sélectionnez une barre pour ses détails ou un compteur pour consulter ses événements.",
   traceErrorsByType: "Échecs par type d’événement",
   traceRequestErrors: (count) =>
     `${count} requête${count === 1 ? "" : "s"} en erreur`,
@@ -353,14 +359,18 @@ const french: Messages = {
   traceSelectedEvents: (count) => `${count} événements sélectionnés`,
   traceEventList: "Événements de la sélection",
   traceScrollableTimeline: "Chronologie défilante",
+  traceActivityLeft: "← Activité hors champ",
+  traceActivityRight: "Activité hors champ →",
   traceLaneEvents: (label, count) =>
     `Consulter ${count} événements de ${label}`,
+  traceTokenShare:
+    "Part des tokens connus de la session, session principale et agents compris. Les usages manquants sont exclus.",
   traceLaneCost: (label, cost, share) =>
     `Coût comptabilisé pour ${label} : ${cost}${share ? ` (${share} du total)` : ""}`,
   traceLaneCostUnknown: (label) =>
     `${label} rapporte des tokens mais aucun coût chiffré ; il compte pour zéro dans le total de la session`,
   traceCostCoverage: (count, tokens) =>
-    `Le total de la session exclut ${count} agent${count === 1 ? "" : "s"} avec ${tokens} tokens mais sans coût chiffré ; les parts du total ne sont donc pas affichées.`,
+    `Le total de la session exclut ${count} agent${count === 1 ? "" : "s"} avec ${tokens} tokens mais sans coût chiffré ; les pourcentages de coût ne sont donc pas affichés.`,
   traceUntimedEvents: (count) => `${count} événements sans timing`,
   traceGap:
     "Intervalle sans événement chronométré : pause possible ou données temporelles manquantes",
@@ -368,9 +378,10 @@ const french: Messages = {
   mainSession: "Session Pi",
   idleTimeCompressed:
     "Les intervalles non observés sont compressés pour garder l’activité lisible",
-  showMoreAgents: (count) =>
-    `Afficher ${count} agent${count === 1 ? "" : "s"} de plus`,
-  showFewerAgents: "Afficher moins d’agents",
+  traceAgentGroup: (label, count, expanded) =>
+    `${expanded ? "Replier" : "Déplier"} ${label} · ${count} agent${count === 1 ? "" : "s"}`,
+  traceMissingAgentUsage: (count) =>
+    `Usage indisponible pour ${count} agent${count === 1 ? "" : "s"}`,
   activityBucket: (requests, tools, errors) => {
     const activity = `${requests} requête${requests === 1 ? "" : "s"} · ${tools} outil${tools === 1 ? "" : "s"}`
     if (!errors) return activity
@@ -389,7 +400,7 @@ const french: Messages = {
   status: "Statut",
   observedDuration: "Durée observée",
   observedDurationDetail:
-    "Temps écoulé entre le premier et le dernier événement observé.",
+    "Temps écoulé entre le premier et le dernier événement observé. Inclut les pauses, pas seulement le travail actif.",
   requestMetricDetail: "Requêtes modèle enregistrées dans cette session.",
   tokenMetricDetail: "Tokens comptabilisés dans cette session.",
   costMetricDetail: "Estimation équivalente API issue de l’usage enregistré.",
@@ -404,6 +415,7 @@ const french: Messages = {
   tokenCount: (value, count) => `${value} token${count === 1 ? "" : "s"}`,
   agentUsageUnavailable: "Détails d’usage indisponibles",
   agentCostUnavailable: "Coût indisponible",
+  agentTokensUnavailable: "Tokens indisponibles",
   agentPrecisionExact: "Exact",
   agentPrecisionReported: "Déclaré",
   agentPrecisionEstimated: "Estimé",

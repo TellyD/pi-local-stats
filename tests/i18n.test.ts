@@ -7,6 +7,42 @@ import {
 } from "../src/lib/i18n.tsx"
 
 describe("localization", () => {
+  it.each([
+    ["en-US", "1 hr", "1.5 hr", "24 hr", "1 day", "6.8 days"],
+    ["fr-FR", "1\u202fh", "1,5\u202fh", "24\u202fh", "1\u202fj", "6,8\u202fj"],
+  ])(
+    "formats long durations in hours and days in %s",
+    (locale, hour, fractionalHour, roundedHours, day, days) => {
+      const format = createFormatters(locale)
+      expect(format.duration(3_599_999)).toBe("60 min")
+      expect(format.duration(3_600_000)).toBe(hour)
+      expect(format.duration(5_400_000)).toBe(fractionalHour)
+      expect(format.duration(86_399_999)).toBe(roundedHours)
+      expect(format.duration(86_400_000)).toBe(day)
+      expect(format.duration(591_344_293)).toBe(days)
+    }
+  )
+
+  it.each([
+    ["en-US", "1.5 s", "1.5 min"],
+    ["fr-FR", "1,5 s", "1,5 min"],
+  ])(
+    "preserves short and invalid durations in %s",
+    (locale, seconds, minutes) => {
+      const format = createFormatters(locale)
+      for (const value of [0, -1, NaN, Infinity, -Infinity]) {
+        expect(format.duration(value)).toBe("—")
+      }
+      expect(format.duration(123.6)).toBe("124 ms")
+      expect(format.duration(999)).toBe("999 ms")
+      expect(format.duration(1_000)).toBe("1 s")
+      expect(format.duration(1_500)).toBe(seconds)
+      expect(format.duration(59_999)).toBe("60 s")
+      expect(format.duration(60_000)).toBe("1 min")
+      expect(format.duration(90_000)).toBe(minutes)
+    }
+  )
+
   it.each(["en-US", "fr-FR"])(
     "distinguishes events within a minute in %s",
     (locale) => {

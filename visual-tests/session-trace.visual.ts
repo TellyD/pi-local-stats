@@ -160,6 +160,307 @@ async function capture(page: Page, name: string) {
   })
 }
 
+test("agent types group named runs, pack overlaps, total tokens and expand by keyboard", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 })
+  const groupedAgents = agents.map((agent, index) => ({
+    ...agent,
+    agentType: agent.label,
+    label: `run-${index}`,
+    startedAt:
+      index === 11
+        ? null
+        : new Date(
+            start + (8 + Math.floor(index / 4) * 12) * minute
+          ).toISOString(),
+    durationMs: index === 11 ? null : 8 * minute,
+    tokens: index % 2 === 0 && index !== 0 ? (index + 1) * 1000 : null,
+    includedInSessionTotal: index % 2 === 0 && index !== 0,
+  }))
+  await mockApi(page, {
+    ...trace,
+    spans: [
+      ...events,
+      ...groupedAgents,
+      {
+        ...events[0]!,
+        id: "child:worker",
+        parentId: "agent:0",
+        tokens: 1000,
+        cost: 1,
+        isError: true,
+      },
+    ],
+  })
+  await page.goto(sessionUrl)
+  const timeline = page.getByRole("region", { name: "Scrollable timeline" })
+  const worker = timeline.locator('[data-agent-group="worker"]')
+  await expect(timeline.locator("[data-agent-group]")).toHaveCount(2)
+  await expect(timeline.locator("[data-lane-id]")).toHaveCount(1)
+  await expect(timeline.locator("[data-agent-id]")).toHaveCount(12)
+  await expect(worker).toContainText("36K tokens")
+  await expect(timeline.locator('[data-agent-group="reviewer"]')).toContainText(
+    "Usage details unavailable"
+  )
+  await expect(page.getByRole("note")).toContainText(
+    "5 agents with 35K tokens but no priced cost"
+  )
+  const boxes = await worker.locator("[data-trace-mark]").evaluateAll((marks) =>
+    marks.map((mark) => {
+      const { x, y, width, height } = mark.getBoundingClientRect()
+      return { x, y, width, height }
+    })
+  )
+  expect(new Set(boxes.map((box) => box.y)).size).toBe(2)
+  for (let i = 0; i < boxes.length; i++) {
+    for (const other of boxes.slice(i + 1)) {
+      const box = boxes[i]!
+      expect(
+        box.x + box.width <= other.x ||
+          other.x + other.width <= box.x ||
+          box.y + box.height <= other.y ||
+          other.y + other.height <= box.y
+      ).toBe(true)
+    }
+  }
+  await capture(page, "session-agent-types-grouped")
+  const bar = worker.locator('[data-agent-id="agent:8"]')
+  await bar.focus()
+  await page.keyboard.press("Enter")
+  await expect(page.locator('[data-selected-span-id="agent:8"]')).toContainText(
+    "9K"
+  )
+  await expect(bar).toHaveAttribute("aria-pressed", "true")
+  await expect(timeline.locator("[data-agent-group]")).toHaveCount(2)
+  await page
+    .getByRole("button", { name: "Show all events", exact: true })
+    .click()
+  const toggle = worker.getByRole("button", {
+    name: "Expand worker · 6 agents",
+    exact: true,
+  })
+  await toggle.focus()
+  await page.keyboard.press("Enter")
+  await expect(toggle).toHaveCount(0)
+  const collapse = worker.getByRole("button", {
+    name: "Collapse worker · 6 agents",
+    exact: true,
+  })
+  await expect(collapse).toHaveAttribute("aria-expanded", "true")
+  await expect(timeline.locator("[data-lane-id]")).toHaveCount(7)
+  const groupedBox = (await bar.boundingBox())!
+  const expandedBox = (await timeline
+    .locator('[data-lane-id="agent:8"] [data-trace-mark]')
+    .boundingBox())!
+  expect(expandedBox.x).toBeCloseTo(groupedBox.x)
+  expect(expandedBox.width).toBeCloseTo(groupedBox.width)
+  await timeline.locator('[data-lane-id="agent:0"] [data-trace-mark]').click()
+  await expect(
+    page.locator('[data-selected-span-id="child:worker"]')
+  ).toBeVisible()
+  await expect(collapse).toHaveAttribute("aria-expanded", "true")
+  await collapse.click()
+  await expect(worker.locator('[data-agent-id="agent:0"]')).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  )
+  await expect(
+    page.locator('[data-selected-span-id="child:worker"]')
+  ).toBeVisible()
+  await expect(timeline.locator("[data-lane-id]")).toHaveCount(1)
+  await page
+    .getByRole("button", { name: "Show all events", exact: true })
+    .click()
+  await timeline.locator('[data-agent-id="agent:11"]').click()
+  await expect(
+    page.locator('[data-selected-span-id="agent:11"]')
+  ).toContainText("Timing unavailable")
+  await expectNoHorizontalOverflow(page)
+})
+
+test("a singleton type retains its summary and expands to the named execution", async ({
+  page,
+}) => {
+  await mockApi(page, {
+    ...trace,
+    session: { ...trace.session, cost: 0.2 },
+    spans: [
+      {
+        ...agents[0]!,
+        agentType: "scout",
+        label: "scan-api",
+        tokens: 1200,
+        cost: 0.2,
+        includedInSessionTotal: true,
+      },
+      { ...events[0]!, tokens: 1200, cost: 0 },
+    ],
+  })
+  await page.goto(sessionUrl)
+  const group = page.locator('[data-agent-group="scout"]')
+  await expect(group).toContainText("1.2K tokens · 50%")
+  await expect(group).toContainText("$0.20 · 100%")
+  const expand = group.getByRole("button", {
+    name: "Expand scout · 1 agent",
+    exact: true,
+  })
+  await expand.focus()
+  await page.keyboard.press("Enter")
+  const lane = page.locator('[data-lane-id="agent:0"]')
+  await expect(lane).toBeVisible()
+  await expect(lane).toContainText("scan-api")
+  await expect(group).toContainText("1.2K tokens · 50%")
+  await lane.locator("[data-trace-mark]").click()
+  await expect(page.locator('[data-selected-span-id="agent:0"]')).toContainText(
+    "1.2K"
+  )
+  await group
+    .getByRole("button", { name: "Collapse scout · 1 agent", exact: true })
+    .click()
+  await expect(lane).toHaveCount(0)
+  await expect(group.locator("[data-trace-mark]")).toHaveAttribute(
+    "aria-pressed",
+    "true"
+  )
+  await expect(group).toContainText("1.2K tokens · 50%")
+  await page.getByRole("button", { name: "fr", exact: true }).click()
+  await expect(
+    group.getByTitle(
+      "Part des tokens connus de la session, session principale et agents compris. Les usages manquants sont exclus.",
+      { exact: true }
+    )
+  ).toContainText("tokens · 50")
+})
+
+test("offscreen activity can be revealed from groups and lanes after scrolling or resizing", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 900, height: 1000 })
+  const day = 86_400_000
+  const lateAt = new Date(start + 6 * day).toISOString()
+  await mockApi(page, {
+    ...trace,
+    session: { ...trace.session, durationMs: 7 * day },
+    bounds: {
+      ...trace.bounds,
+      endedAt: new Date(start + 7 * day).toISOString(),
+    },
+    spans: [
+      {
+        ...events[0]!,
+        startedAt: new Date(start).toISOString(),
+        durationMs: 7 * day,
+      },
+      { ...events[2]!, startedAt: lateAt, durationMs: minute },
+      {
+        ...agents[0]!,
+        agentType: "worker",
+        label: "early",
+        startedAt: new Date(start).toISOString(),
+        durationMs: minute,
+      },
+      {
+        ...agents[1]!,
+        agentType: "worker",
+        label: "late",
+        startedAt: lateAt,
+        durationMs: minute,
+      },
+      {
+        ...agents[2]!,
+        agentType: "worker",
+        label: "untimed",
+        startedAt: null,
+        durationMs: null,
+      },
+    ],
+  })
+  await page.goto(sessionUrl)
+  await expect(page.locator("dl").first()).toContainText("7 days")
+  await expect(page.locator("dl").first()).toContainText("Includes pauses")
+  const timeline = page.locator("[data-trace-viewport]")
+  const group = timeline.locator('[data-agent-group="worker"]')
+  await expect(
+    group.getByRole("button", { name: "Activity offscreen →", exact: true })
+  ).toBeVisible()
+  await expect(
+    group.getByRole("button", { name: "← Activity offscreen", exact: true })
+  ).toHaveCount(0)
+  await expect(
+    timeline
+      .locator('[data-lane-id="root"]')
+      .getByRole("button", { name: "Activity offscreen →", exact: true })
+  ).toBeVisible()
+  await group
+    .getByRole("button", { name: "Expand worker · 3 agents", exact: true })
+    .click()
+  const late = timeline.locator('[data-lane-id="agent:1"]')
+  const early = timeline.locator('[data-lane-id="agent:0"]')
+  const untimed = timeline.locator('[data-lane-id="agent:2"]')
+  await expect(
+    untimed.getByRole("button", { name: /Activity offscreen/ })
+  ).toHaveCount(0)
+  const reveal = late.getByRole("button", {
+    name: "Activity offscreen →",
+    exact: true,
+  })
+  await reveal.focus()
+  await page.keyboard.press("Enter")
+  const mark = late.locator("[data-trace-mark]")
+  await expect(mark).toBeFocused()
+  await expect(reveal).toHaveCount(0)
+  const viewport = (await timeline.boundingBox())!
+  const box = (await mark.boundingBox())!
+  expect(box.x).toBeGreaterThanOrEqual(viewport.x + 192)
+  expect(box.x + box.width).toBeLessThanOrEqual(viewport.x + viewport.width)
+  await page.keyboard.press("Enter")
+  await expect(page.locator('[data-selected-span-id="agent:1"]')).toBeVisible()
+  await page
+    .getByRole("button", { name: "Show all events", exact: true })
+    .click()
+  await early
+    .getByRole("button", { name: "← Activity offscreen", exact: true })
+    .click()
+  await expect(early.locator("[data-trace-mark]")).toBeFocused()
+  await expect(
+    late.getByRole("button", { name: "Activity offscreen →", exact: true })
+  ).toBeVisible()
+  await capture(page, "session-offscreen-desktop")
+  await page.setViewportSize({ width: 1600, height: 1000 })
+  await expect(
+    timeline.getByRole("button", { name: /Activity offscreen/ })
+  ).toHaveCount(0)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole("button", { name: "fr", exact: true }).click()
+  await expect(page.locator("dl").first()).toContainText("7 j")
+  const mobileHint = late.getByRole("button", {
+    name: "Activité hors champ →",
+    exact: true,
+  })
+  await expect(mobileHint).toBeVisible()
+  const hintBox = (await mobileHint.boundingBox())!
+  expect(hintBox.x).toBeGreaterThanOrEqual(0)
+  expect(hintBox.x + hintBox.width).toBeLessThanOrEqual(390)
+  await capture(page, "session-offscreen-mobile-fr")
+  await mobileHint.click()
+  await expect(mark).toBeFocused()
+  const mobileViewport = (await timeline.boundingBox())!
+  const mobileMark = (await mark.boundingBox())!
+  expect(mobileMark.x).toBeGreaterThanOrEqual(mobileViewport.x + 192)
+  expect(mobileMark.x + mobileMark.width).toBeLessThanOrEqual(
+    mobileViewport.x + mobileViewport.width
+  )
+  await page.getByText("Masquer la chronologie", { exact: true }).click()
+  await page
+    .getByText("Afficher la chronologie · 5 événements", { exact: true })
+    .click()
+  await expect(
+    early.getByRole("button", { name: "← Activité hors champ", exact: true })
+  ).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+})
+
 test("desktop: errors first, grouped events and their costs inspectable, reset", async ({
   page,
 }) => {
@@ -206,7 +507,7 @@ test("desktop: errors first, grouped events and their costs inspectable, reset",
     .click()
   await expect(list).toHaveCount(0)
   await expect(timeline.getByRole("button", { name: /^Agent ·/ })).toHaveCount(
-    16
+    12
   )
 
   // A second click on an error filter also clears it.
@@ -263,14 +564,13 @@ test("desktop: errors first, grouped events and their costs inspectable, reset",
     .getByRole("button", { name: "Show all events", exact: true })
     .click()
   await page
-    .getByRole("button", { name: "Show 4 more agents", exact: true })
+    .getByRole("button", { name: "Expand worker · 6 agents", exact: true })
     .click()
-  await expect(timeline.getByRole("button", { name: /^Agent ·/ })).toHaveCount(
-    24
-  )
+  await expect(timeline.locator("[data-lane-id]")).toHaveCount(7)
   await page
-    .getByRole("button", { name: "Show fewer agents", exact: true })
+    .getByRole("button", { name: "Collapse worker · 6 agents", exact: true })
     .click()
+  await expect(timeline.locator("[data-lane-id]")).toHaveCount(1)
 })
 
 test("mobile: collapsed initially, scrollable timeline and French interactions", async ({
@@ -317,11 +617,17 @@ test("mobile: collapsed initially, scrollable timeline and French interactions",
   })
   expect(await timeline.evaluate((el) => el.scrollLeft)).toBe(300)
   await capture(page, "session-timeline-mobile-fr")
-  const moreAgents = await page
-    .getByRole("button", { name: "Afficher 4 agents de plus", exact: true })
-    .boundingBox()
-  expect(moreAgents!.x).toBeGreaterThanOrEqual(0)
-  expect(moreAgents!.x + moreAgents!.width).toBeLessThanOrEqual(390)
+  const groupToggle = page.getByRole("button", {
+    name: "Déplier worker · 6 agents",
+    exact: true,
+  })
+  const groupBox = (await groupToggle.boundingBox())!
+  expect(groupBox.x).toBeGreaterThanOrEqual(0)
+  expect(groupBox.x + groupBox.width).toBeLessThanOrEqual(390)
+  await groupToggle.click()
+  await expect(
+    page.getByRole("button", { name: "Replier worker · 6 agents", exact: true })
+  ).toHaveAttribute("aria-expanded", "true")
   await timeline.screenshot({
     path: "visual-output/session-timeline-mobile-detail.png",
     animations: "disabled",
@@ -416,6 +722,12 @@ test("agent lanes distinguish failed agents from child errors", async ({
   })
   await page.goto(sessionUrl)
   const timeline = page.getByRole("region", { name: "Scrollable timeline" })
+  await timeline
+    .getByRole("button", { name: "Expand worker · 3 agents", exact: true })
+    .click()
+  await timeline
+    .getByRole("button", { name: "Expand reviewer · 2 agents", exact: true })
+    .click()
   const lane = timeline.locator('[data-lane-id="agent:0"]')
   await expect(lane.locator("[data-trace-mark]")).toHaveCount(1)
   await expect(
@@ -506,6 +818,74 @@ test("agent lanes distinguish failed agents from child errors", async ({
   await expectNoHorizontalOverflow(page)
 })
 
+test("expanded agents show tokens and shares independently from known, zero or missing costs", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 })
+  const metrics = [
+    { tokens: 147800, cost: null, includedInSessionTotal: true },
+    { tokens: 147800, cost: 1.23, includedInSessionTotal: true },
+    { tokens: 0, cost: 0, includedInSessionTotal: true },
+    { tokens: null, cost: null, includedInSessionTotal: true },
+    { tokens: null, cost: null, includedInSessionTotal: false },
+    { tokens: null, cost: 0.5, includedInSessionTotal: true },
+  ]
+  await mockApi(page, {
+    ...trace,
+    session: { ...trace.session, tokens: 591200, cost: 3.73 },
+    spans: [
+      ...metrics.map((usage, index) => ({
+        ...agents[index]!,
+        label: "reviewer",
+        agentType: "reviewer",
+        ...usage,
+      })),
+      { ...events[0]!, tokens: 147800, cost: 0 },
+      { ...events[2]!, tokens: 147800, cost: 2, parentId: "agent:4" },
+      {
+        ...events[4]!,
+        tokens: 999999,
+        cost: 999,
+        parentId: "agent:4",
+        includedInSessionTotal: false,
+      },
+    ],
+  })
+  await page.goto(sessionUrl)
+  await page
+    .getByRole("button", { name: "Expand reviewer · 6 agents", exact: true })
+    .click()
+  const lane = (index: number) =>
+    page.locator(`[data-lane-id="agent:${index}"]`)
+  for (const index of [0, 1, 4])
+    await expect(lane(index)).toContainText("147.8K tokens · 25%")
+  await expect(
+    lane(0).getByText("Cost unavailable", { exact: true })
+  ).toBeVisible()
+  await expect(lane(0)).not.toContainText(" · —")
+  await expect(lane(1)).toContainText("$1.23")
+  await expect(lane(2)).toContainText("0 tokens · 0%")
+  await expect(lane(2)).toContainText("$0.00")
+  await expect(lane(2)).not.toContainText("Cost unavailable")
+  await expect(lane(3)).toContainText("Tokens unavailable")
+  await expect(lane(3)).toContainText("Cost unavailable")
+  await expect(lane(3)).not.toContainText("0 tokens")
+  await expect(lane(4)).toContainText("$2.00")
+  await expect(lane(4)).not.toContainText("999")
+  await expect(lane(5)).toContainText("Tokens unavailable")
+  await expect(lane(5)).toContainText("$0.50")
+  await capture(page, "session-agent-usage-consistent")
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole("button", { name: "fr", exact: true }).click()
+  await expect(lane(0)).toContainText("tokens · 25")
+  await expect(
+    lane(0).getByText("Coût indisponible", { exact: true })
+  ).toBeVisible()
+  await expect(lane(3)).toContainText("Tokens indisponibles")
+  await expect(lane(1)).toContainText("1,23")
+  await capture(page, "session-agent-usage-consistent-mobile-fr")
+})
+
 test("no generic diagnostic; untimed events and an expensive ninth agent remain accessible", async ({
   page,
 }) => {
@@ -555,7 +935,7 @@ test("no generic diagnostic; untimed events and an expensive ninth agent remain 
     .getByRole("button", { name: "Show all events", exact: true })
     .click()
   await page
-    .getByRole("button", { name: "Show 4 more agents", exact: true })
+    .getByRole("button", { name: "Expand worker · 6 agents", exact: true })
     .click()
   await page.locator('[data-lane-id="agent:8"] [data-trace-mark]').click()
   await expect(page.locator("[data-selected-span-id]")).toContainText("$12.00")
@@ -567,7 +947,7 @@ test("no generic diagnostic; untimed events and an expensive ninth agent remain 
     page
       .getByRole("region", { name: "Scrollable timeline" })
       .getByRole("button", { name: /^Agent · worker/, pressed: true })
-  ).toHaveCount(2)
+  ).toHaveCount(3)
   await capture(page, "session-agent-cost-desktop")
 })
 
@@ -636,7 +1016,10 @@ test("compressed gaps near the edges do not overflow with all agents expanded", 
   })
   await page.goto(sessionUrl)
   await page
-    .getByRole("button", { name: "Show 4 more agents", exact: true })
+    .getByRole("button", { name: "Expand worker · 6 agents", exact: true })
+    .click()
+  await page
+    .getByRole("button", { name: "Expand reviewer · 6 agents", exact: true })
     .click()
   const timeline = page.getByRole("region", { name: "Scrollable timeline" })
   await expect(timeline.locator("[data-lane-id]")).toHaveCount(13)

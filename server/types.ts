@@ -116,6 +116,7 @@ export interface SessionTraceSpan {
   depth: number
   kind: SessionTraceSpanKind
   label: string
+  agentType?: string | null
   startedAt: string | null
   durationMs: number | null
   provider: string | null
