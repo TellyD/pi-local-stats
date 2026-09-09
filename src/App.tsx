@@ -83,7 +83,7 @@ function FilterSelect({
             selectedValue === ALL_VALUE
               ? label
               : (options.find((option) => option.value === selectedValue)
-                  ?.label ?? selectedValue)
+                  ?.label ?? "…")
           }
         </SelectValue>
       </SelectTrigger>
