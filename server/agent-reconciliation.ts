@@ -117,6 +117,21 @@ function usageOf(row: ObservationRow): AgentUsageObservation | null {
     : null
 }
 
+function bestUsage(rows: ObservationRow[]): ObservationRow | null {
+  return (
+    [...rows]
+      .filter((row) => usageOf(row))
+      .sort(
+        (left, right) =>
+          right.usage_priority - left.usage_priority ||
+          observationTime(right) - observationTime(left) ||
+          precisionRank[right.token_precision] -
+            precisionRank[left.token_precision] ||
+          left.observation_key.localeCompare(right.observation_key)
+      )[0] ?? null
+  )
+}
+
 function firstValue<K extends keyof ObservationRow>(
   rows: ObservationRow[],
   key: K
@@ -131,10 +146,8 @@ function resolveSession(
   byPath: Map<string, SessionRow>,
   byId: Map<string, SessionRow[]>
 ): SessionRow | null {
-  if (observation.root_session_file) {
-    const exact = byPath.get(observation.root_session_file)
-    if (exact) return exact
-  }
+  if (observation.root_session_file)
+    return byPath.get(observation.root_session_file) ?? null
   if (observation.root_session_ref) {
     const byExactPath = byPath.get(observation.root_session_ref)
     if (byExactPath) return byExactPath
@@ -239,9 +252,14 @@ interface CanonicalRun {
   included: boolean
   hasSelectedRequests: boolean
   overlappedSubtree: boolean
+  suppression: number
+  aliases: string[]
+  requestPath: string | null
 }
 
-function selectedRequestPath(run: CanonicalRun): string | null {
+function selectedRequestPath(
+  run: Omit<CanonicalRun, "requestPath">
+): string | null {
   return (
     run.agentSession?.file_path ??
     (run.usageRow?.channel === "output" ||
@@ -334,6 +352,15 @@ export function reconcileAgentRuns(db: SqliteDatabase): void {
       observation,
     ])
 
+  const deletedUsage = new Map(
+    (
+      db.prepare("SELECT * FROM deleted_agent_usage").all() as {
+        kind: string
+        record_key: string
+        suppression: number
+      }[]
+    ).map((row) => [stableKey([row.kind, row.record_key]), row.suppression])
+  )
   const runs: CanonicalRun[] = []
   for (const [logicalKey, group] of groups) {
     const sorted = [...group].sort(
@@ -351,21 +378,44 @@ export function reconcileAgentRuns(db: SqliteDatabase): void {
       rootChoice.observation.root_session_ref ??
       "orphan"
     const metadata = sorted[0]!
-    const usageRow =
-      [...group]
-        .filter((row) => usageOf(row))
-        .sort(
-          (left, right) =>
-            right.usage_priority - left.usage_priority ||
-            observationTime(right) - observationTime(left) ||
-            precisionRank[right.token_precision] -
-              precisionRank[left.token_precision] ||
-            left.observation_key.localeCompare(right.observation_key)
-        )[0] ?? null
+    const usageRow = bestUsage(group)
     const runKey = canonicalRunKey(
       stableKey([metadata.adapter, rootScope, metadata.native_run_key])
     )
-    runs.push({
+    const aliases = [
+      ...new Set([
+        logicalKey,
+        stableKey([metadata.adapter, rootScope, metadata.native_run_key]),
+      ]),
+    ].filter((key) => JSON.parse(key)[1] !== "orphan")
+    const agentSession = findAgentSession(sorted, root, sessions, runKey)
+    const usageFiles = [
+      agentSession?.file_path,
+      ...group.map((row) => row.session_file),
+      ...group
+        .filter(
+          (row) => row.channel === "output" || row.channel === "legacy-output"
+        )
+        .map((row) => row.source_path),
+    ]
+    const suppression = Math.max(
+      0,
+      ...usageFiles.map((path) =>
+        path ? (deletedUsage.get(stableKey(["usage_file", path])) ?? 0) : 0
+      ),
+      ...group.map(
+        (row) =>
+          deletedUsage.get(stableKey(["observation", row.observation_key])) ?? 0
+      ),
+      ...aliases.map((key) => deletedUsage.get(stableKey(["alias", key])) ?? 0)
+    )
+    // Remember an unambiguous ID for when its root file disappears, but only
+    // match current canonical scopes above: another explicit path is not this run.
+    if (root && byId.get(root.session_id)?.length === 1)
+      aliases.push(
+        stableKey([metadata.adapter, root.session_id, metadata.native_run_key])
+      )
+    const run = {
       runKey,
       logicalKey,
       rows: sorted,
@@ -376,13 +426,16 @@ export function reconcileAgentRuns(db: SqliteDatabase): void {
         root?.session_id ?? rootChoice.observation.root_session_ref ?? null,
       rootFile:
         root?.file_path ?? rootChoice.observation.root_session_file ?? null,
-      agentSession: findAgentSession(sorted, root, sessions, runKey),
+      agentSession,
       parentRunKey: null,
       depth: 1,
       included: Boolean(usageRow && usageRow.usage_scope !== "unassigned"),
       hasSelectedRequests: false,
       overlappedSubtree: false,
-    })
+      suppression,
+      aliases,
+    }
+    runs.push({ ...run, requestPath: selectedRequestPath(run) })
   }
 
   const byNative = new Map<string, CanonicalRun[]>()
@@ -400,7 +453,8 @@ export function reconcileAgentRuns(db: SqliteDatabase): void {
       byNative.get(stableKey([run.metadata.adapter, parentNativeId])) ?? []
     const parent = candidates.find(
       (candidate) =>
-        candidate.rootId === run.rootId || candidate.rootFile === run.rootFile
+        (candidate.rootFile ?? candidate.rootId ?? "orphan") ===
+        (run.rootFile ?? run.rootId ?? "orphan")
     )
     if (parent && parent !== run) run.parentRunKey = parent.runKey
   }
@@ -408,7 +462,7 @@ export function reconcileAgentRuns(db: SqliteDatabase): void {
     "SELECT 1 FROM requests WHERE file_path = ? AND usage_scope <> 'unassigned' LIMIT 1"
   )
   for (const run of runs) {
-    const sourcePath = selectedRequestPath(run)
+    const sourcePath = run.requestPath
     run.hasSelectedRequests = Boolean(sourcePath && hasRequests.get(sourcePath))
   }
 
@@ -423,16 +477,53 @@ export function reconcileAgentRuns(db: SqliteDatabase): void {
   for (const run of runs) run.depth = depthFor(run)
   const ancestorsWithIncludedDescendants = new Set<string>()
   for (const descendant of runs) {
-    if (!descendant.included && !descendant.hasSelectedRequests) continue
+    if (
+      !descendant.included &&
+      !descendant.hasSelectedRequests &&
+      !descendant.suppression
+    )
+      continue
     let parentKey = descendant.parentRunKey
     const seen = new Set<string>()
     while (parentKey && !seen.has(parentKey)) {
       seen.add(parentKey)
       ancestorsWithIncludedDescendants.add(parentKey)
-      parentKey = runsByKey.get(parentKey)?.parentRunKey ?? null
+      const parent = runsByKey.get(parentKey)
+      if (parent && descendant.suppression)
+        parent.suppression = Math.max(parent.suppression, 1)
+      parentKey = parent?.parentRunKey ?? null
     }
   }
-  for (const run of runs)
+  // ponytail: affected cohorts permanently exclude cumulative-only updates;
+  // only new exact requests can split future usage from deleted history.
+  const clearedUsage = {
+    usage_scope: null,
+    input_tokens: null,
+    output_tokens: null,
+    cache_read_tokens: null,
+    cache_write_tokens: null,
+    total_tokens: null,
+    total_cost: null,
+    request_count: null,
+    tool_count: null,
+    turn_count: null,
+    token_precision: "unknown",
+    cost_precision: "unknown",
+  } as const
+  const clearedObservations = new Set<string>()
+  for (const run of runs) {
+    if (run.suppression) {
+      for (const row of run.rows) {
+        if (run.suppression === 2 || row.usage_scope === "subtree") {
+          Object.assign(row, clearedUsage)
+          clearedObservations.add(row.observation_key)
+        }
+      }
+      run.usageRow = bestUsage(run.rows)
+      run.included = Boolean(
+        run.usageRow && run.usageRow.usage_scope !== "unassigned"
+      )
+    }
     if (
       run.usageRow?.usage_scope === "subtree" &&
       ancestorsWithIncludedDescendants.has(run.runKey)
@@ -440,8 +531,28 @@ export function reconcileAgentRuns(db: SqliteDatabase): void {
       run.included = false
       run.overlappedSubtree = true
     }
+  }
 
   const replace = db.transaction(() => {
+    const remember = db.prepare(`
+      INSERT INTO deleted_agent_usage (kind, record_key, suppression) VALUES (?, ?, ?)
+      ON CONFLICT (kind, record_key) DO UPDATE
+      SET suppression = MAX(suppression, excluded.suppression)
+    `)
+    for (const run of runs) {
+      if (!run.suppression) continue
+      for (const row of run.rows)
+        remember.run("observation", row.observation_key, run.suppression)
+      for (const alias of run.aliases)
+        remember.run("alias", alias, run.suppression)
+    }
+    const clear = db.prepare(`UPDATE agent_observations SET
+      ${Object.keys(clearedUsage)
+        .map((key) => `${key} = ?`)
+        .join(", ")}
+      WHERE observation_key = ?`)
+    for (const key of clearedObservations)
+      clear.run(...Object.values(clearedUsage), key)
     const updateObservationKey = db.prepare(
       "UPDATE agent_observations SET logical_key = ?, run_key = ? WHERE observation_key = ?"
     )
@@ -553,7 +664,7 @@ export function reconcileAgentRuns(db: SqliteDatabase): void {
           .map((row) => row.source_path)
       )
       if (run.agentSession) sourcePaths.add(run.agentSession.file_path)
-      const selectedSourcePath = selectedRequestPath(run)
+      const selectedSourcePath = run.requestPath
       for (const sourcePath of sourcePaths) {
         db.prepare(
           `UPDATE requests SET accounting_session_id = ?, agent_run_key = ?,

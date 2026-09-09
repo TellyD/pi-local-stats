@@ -1,4 +1,4 @@
-import { EyeIcon, EyeOffIcon } from "lucide-react"
+import { EyeIcon, EyeOffIcon, Trash2Icon } from "lucide-react"
 
 import { EmptyRows } from "@/components/dashboard/EmptyRows"
 import { Badge } from "@/components/ui/badge"
@@ -21,17 +21,22 @@ export function ModelsTable({
   hiddenRows,
   hidingModel,
   showingModel,
+  deletingModel,
   onHide,
   onShow,
+  onDelete,
 }: {
   rows: StatsResponse["models"]
   hiddenRows: StatsResponse["hiddenModels"]
   hidingModel: { provider: string; model: string } | null
   showingModel: { provider: string; model: string } | null
+  deletingModel: { provider: string; model: string } | null
+  onDelete: (provider: string, model: string) => Promise<void>
   onHide: (provider: string, model: string) => Promise<void>
   onShow: (provider: string, model: string) => Promise<void>
 }) {
   const { messages: t, format } = useI18n()
+  const isMutating = !!(hidingModel || showingModel || deletingModel)
   if (rows.length === 0 && hiddenRows.length === 0)
     return <EmptyRows kind="model" />
 
@@ -45,8 +50,8 @@ export function ModelsTable({
           <TableHead className="text-right">{t.tokens}</TableHead>
           <TableHead className="text-right">{t.cache}</TableHead>
           <TableHead className="text-right">{t.apiEquivalent}</TableHead>
-          <TableHead className="w-12">
-            <span className="sr-only">{t.hideModel(t.model)}</span>
+          <TableHead className="w-20">
+            <span className="sr-only">{t.modelActions}</span>
           </TableHead>
         </TableRow>
       </TableHeader>
@@ -75,10 +80,7 @@ export function ModelsTable({
                 size="icon-sm"
                 aria-label={t.hideModel(row.model)}
                 title={t.hideModel(row.model)}
-                disabled={
-                  hidingModel?.provider === row.provider &&
-                  hidingModel.model === row.model
-                }
+                disabled={isMutating}
                 onClick={() => {
                   if (
                     window.confirm(t.confirmHideModel(row.model, row.provider))
@@ -87,6 +89,23 @@ export function ModelsTable({
                 }}
               >
                 <EyeOffIcon />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t.deleteModel(row.model)}
+                title={t.deleteModel(row.model)}
+                disabled={isMutating}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      t.confirmDeleteModel(row.model, row.provider)
+                    )
+                  )
+                    void onDelete(row.provider, row.model)
+                }}
+              >
+                <Trash2Icon />
               </Button>
             </TableCell>
           </TableRow>
@@ -109,13 +128,27 @@ export function ModelsTable({
                 size="icon-sm"
                 aria-label={t.showModel(row.model)}
                 title={t.showModel(row.model)}
-                disabled={
-                  showingModel?.provider === row.provider &&
-                  showingModel.model === row.model
-                }
+                disabled={isMutating}
                 onClick={() => void onShow(row.provider, row.model)}
               >
                 <EyeIcon />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t.deleteModel(row.model)}
+                title={t.deleteModel(row.model)}
+                disabled={isMutating}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      t.confirmDeleteModel(row.model, row.provider)
+                    )
+                  )
+                    void onDelete(row.provider, row.model)
+                }}
+              >
+                <Trash2Icon />
               </Button>
             </TableCell>
           </TableRow>

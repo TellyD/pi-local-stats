@@ -147,7 +147,7 @@ function createLegacyDatabase(path: string, version: 13 | 14 | 15 | 16) {
 describe("createDatabase", () => {
   it("crée directement le schéma normalisé", () => {
     const database = createDatabase(":memory:")
-    expect(database.pragma("user_version", { simple: true })).toBe(20)
+    expect(database.pragma("user_version", { simple: true })).toBe(21)
     expect(
       database
         .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
@@ -175,7 +175,7 @@ describe("createDatabase", () => {
 
       const database = createDatabase(databasePath)
 
-      expect(database.pragma("user_version", { simple: true })).toBe(20)
+      expect(database.pragma("user_version", { simple: true })).toBe(21)
       expect(
         database
           .prepare("PRAGMA table_info(tool_calls)")
@@ -275,6 +275,11 @@ describe("createDatabase", () => {
       )
       .run()
     version19.exec(`
+      DROP TABLE deleted_agent_usage;
+      DROP TABLE deleted_model_records;
+      DROP TRIGGER skip_deleted_requests;
+      DROP TRIGGER skip_deleted_tool_calls;
+      DROP TRIGGER skip_deleted_skill_usages;
       DROP VIEW accounted_usage;
       DROP VIEW unique_requests;
       DROP VIEW unique_tool_calls;
@@ -291,7 +296,7 @@ describe("createDatabase", () => {
 
     const migrated = createDatabase(databasePath)
 
-    expect(migrated.pragma("user_version", { simple: true })).toBe(20)
+    expect(migrated.pragma("user_version", { simple: true })).toBe(21)
     expect(
       migrated.prepare("SELECT size FROM indexed_files").pluck().get()
     ).toBe(-1)
@@ -304,23 +309,60 @@ describe("createDatabase", () => {
     migrated.close()
   })
 
+  it("migre le schéma 20 sans réindexer ni perdre les modèles masqués", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "pi-stats-v20-"))
+    temporaryDirectories.push(directory)
+    const path = join(directory, "stats.sqlite")
+    const previous = createDatabase(path)
+    previous.exec(`
+      DROP TABLE deleted_agent_usage;
+      DROP TABLE deleted_model_records;
+      DROP TRIGGER skip_deleted_requests;
+      DROP TRIGGER skip_deleted_tool_calls;
+      DROP TRIGGER skip_deleted_skill_usages;
+      INSERT INTO hidden_models VALUES ('test', 'model', '2026-01-01');
+      INSERT INTO indexed_files (path, size, mtime_ms, indexed_at)
+        VALUES ('session.jsonl', 10, 1, '2026-01-01');
+      PRAGMA user_version = 20;
+    `)
+    previous.close()
+    const migrated = createDatabase(path)
+    try {
+      expect(migrated.pragma("user_version", { simple: true })).toBe(21)
+      expect(
+        migrated.prepare("SELECT size FROM indexed_files").pluck().get()
+      ).toBe(10)
+      expect(
+        migrated.prepare("SELECT model FROM hidden_models").pluck().get()
+      ).toBe("model")
+      expect(
+        migrated
+          .prepare("SELECT COUNT(*) FROM deleted_model_records")
+          .pluck()
+          .get()
+      ).toBe(0)
+    } finally {
+      migrated.close()
+    }
+  })
+
   it("refuse une base future sans la modifier", async () => {
     const directory = await mkdtemp(join(tmpdir(), "pi-stats-future-"))
     temporaryDirectories.push(directory)
     const databasePath = join(directory, "stats.sqlite")
     createLegacyDatabase(databasePath, 16)
     const future = new Database(databasePath)
-    future.pragma("user_version = 21")
+    future.pragma("user_version = 22")
     future.close()
     await chmod(directory, 0o755)
     await chmod(databasePath, 0o644)
 
     expect(() => createDatabase(databasePath)).toThrow(
-      "Unsupported stats database schema 21"
+      "Unsupported stats database schema 22"
     )
 
     const unchanged = new Database(databasePath)
-    expect(unchanged.pragma("user_version", { simple: true })).toBe(21)
+    expect(unchanged.pragma("user_version", { simple: true })).toBe(22)
     expect((await stat(directory)).mode & 0o777).toBe(0o755)
     expect((await stat(databasePath)).mode & 0o777).toBe(0o644)
     expect(

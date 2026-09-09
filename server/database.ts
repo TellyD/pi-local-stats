@@ -3,9 +3,11 @@ import { chmodSync, existsSync, mkdirSync } from "node:fs"
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
 
+import { MODEL_HISTORY_SCHEMA_SQL } from "./model-history.ts"
+
 export type SqliteDatabase = Database.Database
 
-const SCHEMA_VERSION = 20
+const SCHEMA_VERSION = 21
 
 const UNIQUE_VIEWS_SQL = `
   CREATE VIEW unique_requests AS
@@ -309,6 +311,7 @@ const SCHEMA_SQL = `
   CREATE INDEX skill_usages_agent_idx ON skill_usages(agent_run_key, usage_scope);
   ${AGENT_TABLES_SQL}
   ${UNIQUE_VIEWS_SQL}
+  ${MODEL_HISTORY_SCHEMA_SQL}
 `
 
 function expandHome(path: string): string {
@@ -648,7 +651,7 @@ export function createDatabase(
   if (isNew) {
     execMigration(
       db,
-      `BEGIN IMMEDIATE; ${SCHEMA_SQL} PRAGMA user_version = 20; COMMIT;`
+      `BEGIN IMMEDIATE; ${SCHEMA_SQL} PRAGMA user_version = ${SCHEMA_VERSION}; COMMIT;`
     )
     version = SCHEMA_VERSION
   } else if ([13, 14, 15].includes(version)) {
@@ -669,6 +672,13 @@ export function createDatabase(
   }
   if (version === 19) {
     migrate19To20(db)
+    version = 20
+  }
+  if (version === 20) {
+    execMigration(
+      db,
+      `BEGIN IMMEDIATE; ${MODEL_HISTORY_SCHEMA_SQL} PRAGMA user_version = 21; COMMIT;`
+    )
     version = SCHEMA_VERSION
   }
   if (version !== SCHEMA_VERSION) failUnsupported(db, version)

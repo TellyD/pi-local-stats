@@ -181,10 +181,12 @@ export function App() {
     isSyncing,
     hidingModel,
     showingModel,
+    deletingModel,
     refresh,
     sync,
     hideModel,
     showModel,
+    deleteModel,
   } = useStats(
     filters,
     sessionPage,
@@ -229,13 +231,17 @@ export function App() {
       withSessionPage(current, { page: 1, sort, direction })
     )
 
-  const handleHideModel = async (provider: string, model: string) => {
-    const result = await hideModel(provider, model)
+  const handleRemoveModel = async (
+    provider: string,
+    model: string,
+    action: typeof hideModel | typeof deleteModel
+  ) => {
+    const result = await action(provider, model)
     if (!result) return
     setSearchParams((current) => {
       const selected = filtersFromSearch(current)
       const next = new URLSearchParams(current)
-      const hidesSelectedPair =
+      const removesSelectedPair =
         selected.provider === provider && selected.model === model
       next.delete("page")
       if (selected.project && !result.projects.includes(selected.project))
@@ -244,7 +250,7 @@ export function App() {
         next.delete("provider")
       if (
         selected.model &&
-        (!result.models.includes(selected.model) || hidesSelectedPair)
+        (!result.models.includes(selected.model) || removesSelectedPair)
       )
         next.delete("model")
       return next
@@ -465,7 +471,13 @@ export function App() {
                     data={data}
                     hidingModel={hidingModel}
                     showingModel={showingModel}
-                    onHide={handleHideModel}
+                    deletingModel={deletingModel}
+                    onHide={(provider, model) =>
+                      handleRemoveModel(provider, model, hideModel)
+                    }
+                    onDelete={(provider, model) =>
+                      handleRemoveModel(provider, model, deleteModel)
+                    }
                     onShow={showModel}
                   />
                 }

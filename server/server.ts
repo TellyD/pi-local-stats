@@ -21,6 +21,7 @@ import {
   parseSessionPageOptions,
 } from "./stats.ts"
 import { SessionSynchronizer } from "./sync.ts"
+import { deleteModelHistory } from "./model-history.ts"
 import type { SyncResult } from "./types.ts"
 
 const MIME_TYPES: Record<string, string> = {
@@ -193,26 +194,32 @@ export class StatsServer {
         .run(provider, model, new Date().toISOString())
       return {
         hidden: true,
-        projects: this.db
-          .prepare(
-            "SELECT DISTINCT project FROM accounted_usage WHERE project <> '' ORDER BY project"
-          )
-          .pluck()
-          .all() as string[],
-        providers: this.db
-          .prepare(
-            "SELECT DISTINCT provider FROM accounted_usage WHERE provider <> 'unknown' ORDER BY provider"
-          )
-          .pluck()
-          .all() as string[],
-        models: this.db
-          .prepare(
-            "SELECT DISTINCT model FROM accounted_usage WHERE model <> 'unknown' ORDER BY model"
-          )
-          .pluck()
-          .all() as string[],
+        ...this.modelOptions(),
       }
     })()
+  }
+
+  private modelOptions() {
+    return {
+      projects: this.db
+        .prepare(
+          "SELECT DISTINCT project FROM accounted_usage WHERE project <> '' ORDER BY project"
+        )
+        .pluck()
+        .all() as string[],
+      providers: this.db
+        .prepare(
+          "SELECT DISTINCT provider FROM accounted_usage WHERE provider <> 'unknown' ORDER BY provider"
+        )
+        .pluck()
+        .all() as string[],
+      models: this.db
+        .prepare(
+          "SELECT DISTINCT model FROM accounted_usage WHERE model <> 'unknown' ORDER BY model"
+        )
+        .pluck()
+        .all() as string[],
+    }
   }
 
   private showModel(provider: string, model: string): boolean {
@@ -320,6 +327,34 @@ export class StatsServer {
             response,
             trace ? 200 : 404,
             JSON.stringify(trace ?? { error: "Session not found" }),
+            "application/json; charset=utf-8"
+          )
+        }
+        if (request.method === "DELETE" && url.pathname === "/api/models") {
+          const provider = url.searchParams.get("provider") ?? ""
+          const model = url.searchParams.get("model") ?? ""
+          if (
+            !provider ||
+            !model ||
+            provider.length > 500 ||
+            model.length > 500
+          )
+            return this.send(
+              response,
+              400,
+              JSON.stringify({ error: "Invalid provider or model" }),
+              "application/json; charset=utf-8"
+            )
+          await this.activeSync
+          const deleted = deleteModelHistory(this.db, provider, model)
+          return this.send(
+            response,
+            deleted ? 200 : 404,
+            JSON.stringify(
+              deleted
+                ? { deleted: true, ...this.modelOptions() }
+                : { error: "Model not found" }
+            ),
             "application/json; charset=utf-8"
           )
         }

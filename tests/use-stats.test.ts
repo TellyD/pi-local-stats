@@ -80,6 +80,7 @@ vi.mock("@/lib/i18n", () => ({
       syncFailed: "Sync failed",
       hideModelFailed: "Hide failed",
       showModelFailed: "Show failed",
+      deleteModelFailed: "Delete failed",
     },
   }),
 }))
@@ -124,6 +125,81 @@ afterEach(() => {
 })
 
 describe("useStats", () => {
+  it("deletes the exact model with authentication and blocks concurrent mutations", async () => {
+    let finish!: (response: ReturnType<typeof ok>) => void
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<ReturnType<typeof ok>>((resolve) => {
+          finish = resolve
+        })
+    )
+    vi.stubGlobal("fetch", fetchMock)
+    const result = render(false)
+    const deleting = result.deleteModel("provider & co", "model/version")
+    expect(render(false).deletingModel).toEqual({
+      provider: "provider & co",
+      model: "model/version",
+    })
+    expect(await result.hideModel("provider", "model")).toBeNull()
+    await result.showModel("provider", "model")
+    expect(await result.deleteModel("provider", "model")).toBeNull()
+    expect(fetchMock).toHaveBeenCalledExactlyOnceWith(
+      "/api/models?provider=provider+%26+co&model=model%2Fversion",
+      { method: "DELETE", headers: { Authorization: "Bearer token" } }
+    )
+    const response = {
+      deleted: true,
+      projects: ["project"],
+      providers: ["other"],
+      models: ["other"],
+    }
+    finish(ok(response))
+    expect(await deleting).toEqual(response)
+    expect(render(false).deletingModel).toBeNull()
+  })
+
+  it.each(["hideModel", "showModel"] as const)(
+    "blocks deletion during %s",
+    async (action) => {
+      let finish!: (response: ReturnType<typeof ok>) => void
+      const fetchMock = vi.fn((input: string) =>
+        input.startsWith("/api/models")
+          ? new Promise<ReturnType<typeof ok>>((resolve) => {
+              finish = resolve
+            })
+          : Promise.resolve(ok())
+      )
+      vi.stubGlobal("fetch", fetchMock)
+      const result = render(false)
+      const pending = result[action]("provider", "model")
+      expect(await result.deleteModel("provider", "model")).toBeNull()
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      finish(ok())
+      await pending
+    }
+  )
+
+  it.each([
+    [new Error("Delete unavailable"), "Delete unavailable"],
+    ["failure", "Delete failed"],
+  ])(
+    "reports deletion failures and releases the mutation lock",
+    async (cause, message) => {
+      const fetchMock = vi
+        .fn()
+        .mockRejectedValueOnce(cause)
+        .mockResolvedValue(ok({ deleted: false }))
+      vi.stubGlobal("fetch", fetchMock)
+      const result = render(false)
+      expect(await result.deleteModel("provider", "model")).toBeNull()
+      expect(render(false).error).toBe(message)
+      expect(render(false).deletingModel).toBeNull()
+      expect(await result.deleteModel("provider", "model")).toEqual({
+        deleted: false,
+      })
+    }
+  )
+
   it("loads cached stats without waiting for the initial sync", () => {
     const fetchMock = vi.fn((input: string | URL) =>
       String(input).startsWith("/api/sync/initial")

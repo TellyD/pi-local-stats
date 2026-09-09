@@ -513,7 +513,14 @@ describe("SessionSynchronizer", () => {
         "UPDATE agent_runs SET selected_channel = 'legacy-tool-details', status_raw = NULL, status_canonical = 'unknown', coverage = 'partial'"
       )
       .run()
-    database.pragma("user_version = 18")
+    database.exec(`
+      DROP TABLE deleted_agent_usage;
+      DROP TABLE deleted_model_records;
+      DROP TRIGGER skip_deleted_requests;
+      DROP TRIGGER skip_deleted_tool_calls;
+      DROP TRIGGER skip_deleted_skill_usages;
+      PRAGMA user_version = 18;
+    `)
     database.close()
 
     database = createDatabase(databasePath)

@@ -33,7 +33,7 @@ Then run `/stats` inside Pi.
 - URL-backed filters, sorting, and session pagination
 - Per-session timelines with inspectable events and accounted costs per agent
 - Separate request, tool, and agent failure filters, compressed gaps, and mobile timeline scrolling
-- Option to hide selected models from aggregate statistics
+- Options to hide models or permanently delete their existing statistics history
 - English and French interface
 - Automatic background sync while the dashboard is open
 
@@ -48,6 +48,8 @@ Inside Pi, run:
 The extension indexes your local session metadata, starts a server on `127.0.0.1`, and opens the dashboard in your default browser. The server stops when the Pi session shuts down.
 
 Use **Sync** to rescan sessions and supported agent artifacts immediately. Otherwise, the dashboard checks for changed files every 30 seconds while it is open.
+
+The trash button on **Models** deletes a provider/model’s existing indexed usage across all periods, including hidden history. Deletion requires confirmation and leaves Pi session files unchanged. Deletion markers prevent old records from returning during sync; new detailed requests and new agent runs can appear again. Cumulative totals from affected existing agent runs (and overlapping ancestor totals) remain excluded, including later updates, because historical and new usage cannot always be separated. Keep the SQLite index to preserve these deletion markers.
 
 ## Privacy
 

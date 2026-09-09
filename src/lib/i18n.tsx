@@ -98,6 +98,11 @@ const english = {
   confirmHideModel: (model: string, provider: string) =>
     `Hide ${model} (${provider}) from global statistics?\n\nIts indexed data will be preserved.`,
   hideModelFailed: "Could not hide the model.",
+  modelActions: "Model actions",
+  deleteModel: (model: string) => `Delete history for ${model}`,
+  confirmDeleteModel: (model: string, provider: string) =>
+    `Permanently delete all existing statistics history for ${model} (${provider}), across all periods?\n\nThis cannot be undone. Deleted history will not be reimported. Original Pi session files will remain unchanged. Future usage can appear in statistics again. Cumulative totals from affected existing agent runs will remain excluded, including overlapping parent totals and later updates; new runs and new detailed requests will still count.`,
+  deleteModelFailed: "Could not delete the model history.",
   showModel: (model: string) => `Show ${model}`,
   showModelFailed: "Could not show the model.",
   hiddenFromStats: "Hidden from global statistics",
@@ -302,6 +307,11 @@ const french: Messages = {
   confirmHideModel: (model, provider) =>
     `Masquer ${model} (${provider}) des statistiques globales ?\n\nSes données indexées seront conservées.`,
   hideModelFailed: "Impossible de masquer le modèle.",
+  modelActions: "Actions du modèle",
+  deleteModel: (model) => `Supprimer l’historique de ${model}`,
+  confirmDeleteModel: (model, provider) =>
+    `Supprimer définitivement tout l’historique statistique existant de ${model} (${provider}), sur toutes les périodes ?\n\nCette action est irréversible. L’historique supprimé ne sera pas réimporté. Les fichiers de sessions Pi d’origine resteront inchangés. Les utilisations futures pourront réapparaître dans les statistiques. Les totaux cumulés des exécutions de sous-agents existantes concernées et les totaux parents qui les englobent resteront exclus, même après mise à jour ; les nouvelles exécutions et les nouvelles requêtes détaillées seront comptées.`,
+  deleteModelFailed: "Impossible de supprimer l’historique du modèle.",
   showModel: (model) => `Réafficher ${model}`,
   showModelFailed: "Impossible de réafficher le modèle.",
   hiddenFromStats: "Masqué des statistiques globales",

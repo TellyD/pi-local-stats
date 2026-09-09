@@ -21,12 +21,16 @@ export function ModelsPage({
   data,
   hidingModel,
   showingModel,
+  deletingModel,
   onHide,
   onShow,
+  onDelete,
 }: {
   data: StatsResponse
   hidingModel: ModelAction | null
   showingModel: ModelAction | null
+  deletingModel: ModelAction | null
+  onDelete: (provider: string, model: string) => Promise<void>
   onHide: (provider: string, model: string) => Promise<void>
   onShow: (provider: string, model: string) => Promise<void>
 }) {
@@ -89,6 +93,8 @@ export function ModelsPage({
             hiddenRows={data.hiddenModels}
             hidingModel={hidingModel}
             showingModel={showingModel}
+            deletingModel={deletingModel}
+            onDelete={onDelete}
             onHide={onHide}
             onShow={onShow}
           />

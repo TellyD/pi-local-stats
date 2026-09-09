@@ -7,6 +7,7 @@ import {
   type SessionTraceSelection,
 } from "@/lib/dashboard-url"
 import type {
+  DeleteModelResult,
   HideModelResult,
   SessionPageOptions,
   SessionTraceResponse,
@@ -152,6 +153,11 @@ export function useStats(
   const [isSessionsLoading, setIsSessionsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
+  const modelMutationRef = useRef(false)
+  const [deletingModel, setDeletingModel] = useState<{
+    provider: string
+    model: string
+  } | null>(null)
   const [hidingModel, setHidingModel] = useState<{
     provider: string
     model: string
@@ -395,6 +401,8 @@ export function useStats(
 
   const hideModel = useCallback(
     async (provider: string, model: string) => {
+      if (modelMutationRef.current) return null
+      modelMutationRef.current = true
       setHidingModel({ provider, model })
       const search = new URLSearchParams({ provider, model })
       try {
@@ -408,6 +416,7 @@ export function useStats(
         setError(cause instanceof Error ? cause.message : t.hideModelFailed)
         return null
       } finally {
+        modelMutationRef.current = false
         setHidingModel(null)
       }
     },
@@ -416,6 +425,8 @@ export function useStats(
 
   const showModel = useCallback(
     async (provider: string, model: string) => {
+      if (modelMutationRef.current) return
+      modelMutationRef.current = true
       setShowingModel({ provider, model })
       const search = new URLSearchParams({ provider, model })
       try {
@@ -429,10 +440,35 @@ export function useStats(
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : t.showModelFailed)
       } finally {
+        modelMutationRef.current = false
         setShowingModel(null)
       }
     },
     [refresh, t, token]
+  )
+
+  const deleteModel = useCallback(
+    async (provider: string, model: string) => {
+      if (modelMutationRef.current) return null
+      modelMutationRef.current = true
+      setDeletingModel({ provider, model })
+      const search = new URLSearchParams({ provider, model })
+      try {
+        return await request<DeleteModelResult>(
+          `/api/models?${search}`,
+          token,
+          t.requestFailed,
+          { method: "DELETE" }
+        )
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : t.deleteModelFailed)
+        return null
+      } finally {
+        modelMutationRef.current = false
+        setDeletingModel(null)
+      }
+    },
+    [t, token]
   )
 
   const currentSessionsRequest = sessionsRequestSearch(
@@ -453,9 +489,11 @@ export function useStats(
     isSyncing,
     hidingModel,
     showingModel,
+    deletingModel,
     refresh,
     sync,
     hideModel,
     showModel,
+    deleteModel,
   }
 }

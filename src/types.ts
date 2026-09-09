@@ -25,6 +25,10 @@ export interface HideModelResult {
   models: string[]
 }
 
+export interface DeleteModelResult extends Omit<HideModelResult, "hidden"> {
+  deleted: boolean
+}
+
 export interface ShowModelResult {
   shown: boolean
 }
