@@ -37,7 +37,12 @@ describe("localization", () => {
     expect(catalogs.en.messages.averageCostPerSession).toBe("Cost per session")
     expect(catalogs.fr.messages.averageCostPerSession).toBe("Coût par session")
     expect(catalogs.en.messages.activeModels).toBe("Active models")
-    expect(catalogs.fr.messages.topCost).toBe("Coût maximal")
+    expect(catalogs.fr.messages.topCost).toBe("Coût API équivalent maximal")
+    expect(catalogs.fr.messages.topTokens).toBe(
+      "Part des tokens du modèle principal"
+    )
+    expect(catalogs.fr.messages.cacheReadRate).toBe("Taux de lecture du cache")
+    expect(catalogs.fr.messages.hiddenModels).toBe("Modèles masqués")
     expect(catalogs.fr.messages.providerCount("2", 2)).toBe("2 providers")
     expect(catalogs.en.messages.activeTools).toBe("Active tools")
     expect(catalogs.fr.messages.topTool).toBe("Outil principal")

@@ -73,7 +73,7 @@ export function ModelsPage({
           icon={CoinsIcon}
         />
         <MetricCard
-          label={t.cache}
+          label={t.cacheReadRate}
           value={format.percent(data.overview.cacheRate)}
           detail={t.tokensRead(
             format.compact(data.overview.cacheReadTokens),
@@ -87,7 +87,7 @@ export function ModelsPage({
           <CardTitle>{t.models}</CardTitle>
           <CardDescription>{t.modelDetails}</CardDescription>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent>
           <ModelsTable
             rows={data.models}
             hiddenRows={data.hiddenModels}

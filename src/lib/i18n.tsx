@@ -91,8 +91,10 @@ const english = {
   activeModels: "Active models",
   providerCount: (value: string, count: number) =>
     `${value} ${count === 1 ? "provider" : "providers"}`,
-  topTokens: "Top tokens",
-  topCost: "Highest cost",
+  topTokens: "Leading model token share",
+  topCost: "Highest API-equivalent cost",
+  cacheReadRate: "Cache read rate",
+  hiddenModels: "Hidden models",
   modelDetails: "Consumption, cache, and cost by model.",
   hideModel: (model: string) => `Hide ${model}`,
   confirmHideModel: (model: string, provider: string) =>
@@ -300,8 +302,10 @@ const french: Messages = {
     "Sessions sur la période sélectionnée. Sélectionnez une colonne pour trier.",
   activeModels: "Modèles actifs",
   providerCount: (value, count) => `${value} provider${count === 1 ? "" : "s"}`,
-  topTokens: "Top tokens",
-  topCost: "Coût maximal",
+  topTokens: "Part des tokens du modèle principal",
+  topCost: "Coût API équivalent maximal",
+  cacheReadRate: "Taux de lecture du cache",
+  hiddenModels: "Modèles masqués",
   modelDetails: "Consommation, cache et coût par modèle.",
   hideModel: (model) => `Masquer ${model}`,
   confirmHideModel: (model, provider) =>

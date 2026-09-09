@@ -35,19 +35,41 @@ function render(overrides: Partial<typeof props> = {}) {
 }
 
 describe("model history actions", () => {
-  it("offers accessible deletion for both active and hidden models", () => {
+  it("offers labeled action menus and separates hidden models into a closed disclosure", () => {
     const markup = render()
     for (const model of ["active-model", "hidden-model"]) {
-      expect(markup).toContain(`aria-label="Delete history for ${model}"`)
-      expect(markup).toContain(`title="Delete history for ${model}"`)
+      expect(markup).toContain(
+        `aria-label="Model actions: ${model} (provider)"`
+      )
     }
-    expect(markup).toContain('aria-label="Hide active-model"')
-    expect(markup).toContain('aria-label="Show hidden-model"')
+    expect(markup.match(/aria-haspopup="menu"/g)).toHaveLength(2)
     expect(markup).not.toContain('disabled=""')
-    expect(render({ rows: [] })).toContain(
-      'aria-label="Delete history for hidden-model"'
+    expect(markup).toContain("Hidden models · 1</summary>")
+    expect(markup).not.toMatch(/<details[^>]*\bopen/)
+    expect(markup.slice(0, markup.indexOf("</table>"))).not.toContain(
+      "hidden-model"
     )
+    expect(markup).not.toContain(">Provider</th>")
+    expect(markup).toContain(
+      'class="mt-0.5 text-xs text-muted-foreground">provider</div>'
+    )
+    expect(render({ rows: [] })).toContain(
+      'aria-label="Model actions: hidden-model (provider)"'
+    )
+    expect(render({ hiddenRows: [] })).not.toContain("<details")
     expect(render({ rows: [], hiddenRows: [] })).not.toContain("<table")
+  })
+
+  it("scales token bars independently of row order and handles zero tokens", () => {
+    const markup = render({
+      rows: [{ ...props.rows[0], model: "small", tokens: 5 }, props.rows[0]],
+    })
+    expect(
+      Array.from(markup.matchAll(/style="width:([^"]+)"/g), (match) => match[1])
+    ).toEqual(["50%", "100%"])
+    const zero = render({ rows: [{ ...props.rows[0], tokens: 0 }] })
+    expect(zero).toContain('style="width:0%"')
+    expect(zero).not.toMatch(/NaN|Infinity/)
   })
 
   it.each(["hidingModel", "showingModel", "deletingModel"] as const)(
@@ -56,7 +78,7 @@ describe("model history actions", () => {
       const markup = render({
         [state]: { provider: "another-provider", model: "another-model" },
       })
-      expect(markup.match(/disabled=""/g)).toHaveLength(4)
+      expect(markup.match(/ disabled=""/g)).toHaveLength(2)
     }
   )
 
