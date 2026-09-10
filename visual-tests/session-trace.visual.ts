@@ -299,6 +299,8 @@ test("a singleton type retains its summary and expands to the named execution", 
   })
   await page.goto(sessionUrl)
   const group = page.locator('[data-agent-group="scout"]')
+  const root = page.locator('[data-lane-id="root"]')
+  await expect(root).toContainText("1.2K tokens · 50%")
   await expect(group).toContainText("1.2K tokens · 50%")
   await expect(group).toContainText("$0.20 · 100%")
   const expand = group.getByRole("button", {
@@ -331,6 +333,7 @@ test("a singleton type retains its summary and expands to the named execution", 
       { exact: true }
     )
   ).toContainText("tokens · 50")
+  await expect(root).toContainText("tokens · 50")
 })
 
 test("offscreen activity can be revealed from groups and lanes after scrolling or resizing", async ({
@@ -816,6 +819,57 @@ test("agent lanes distinguish failed agents from child errors", async ({
       .getByRole("button")
   ).toHaveCount(6)
   await expectNoHorizontalOverflow(page)
+})
+
+test("agent groups show recorded request/tool totals and inspect only available details", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 1000 })
+  const grouped = agents.slice(0, 3).map((agent, index) => ({
+    ...agent,
+    label: "worker",
+    agentType: "worker",
+    requestCount: index === 0 ? 12 : index === 1 ? 3 : null,
+    toolCount: index === 0 ? 20 : index === 1 ? 5 : null,
+  }))
+  const children = Array.from({ length: 8 }, (_, index) => ({
+    ...events[index < 3 ? 0 : 1]!,
+    id: `child:${index}`,
+    parentId: "agent:1",
+    isError: false,
+  }))
+  await mockApi(page, { ...trace, spans: [...grouped, ...children] })
+  await page.goto(sessionUrl)
+  const group = page.locator('[data-agent-group="worker"]')
+  await expect(group).toContainText("≥ 15 requests · ≥ 25 tools")
+  await group
+    .getByRole("button", { name: "Inspect 8 events in worker", exact: true })
+    .click()
+  await expect(
+    page.getByRole("list", { name: "Events in selection" }).getByRole("button")
+  ).toHaveCount(8)
+  await expect(group).toContainText("≥ 15 requests · ≥ 25 tools")
+  await page
+    .getByRole("button", { name: "Show all events", exact: true })
+    .click()
+  await group
+    .getByRole("button", { name: "Expand worker · 3 agents", exact: true })
+    .click()
+  const first = page.locator('[data-lane-id="agent:0"]')
+  await expect(first).toContainText("12 requests · 20 tools")
+  await expect(first.getByRole("button", { name: /^Inspect/ })).toHaveCount(0)
+  await expect(page.locator('[data-lane-id="agent:1"]')).toContainText(
+    "3 requests · 5 tools"
+  )
+  await expect(page.locator('[data-lane-id="agent:2"]')).toContainText(
+    "Requests unavailable · Tools unavailable"
+  )
+  await capture(page, "session-agent-activity-counts")
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole("button", { name: "fr", exact: true }).click()
+  await expect(group).toContainText("≥ 15 requêtes · ≥ 25 outils")
+  await expect(first).toContainText("12 requêtes · 20 outils")
+  await capture(page, "session-agent-activity-counts-mobile-fr")
 })
 
 test("expanded agents show tokens and shares independently from known, zero or missing costs", async ({

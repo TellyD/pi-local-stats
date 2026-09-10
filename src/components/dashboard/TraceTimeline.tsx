@@ -2,6 +2,7 @@ import { useState, type Ref } from "react"
 import { ActivityIcon, BotIcon, ChevronRightIcon } from "lucide-react"
 
 import { TraceOffscreenActivity } from "@/components/dashboard/TraceOffscreenActivity"
+import { TraceActivitySummary } from "@/components/dashboard/TraceActivitySummary"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { useI18n } from "@/lib/i18n"
@@ -108,6 +109,11 @@ function AgentGroupRow({
             × {group.lanes.length}
           </span>
         </button>
+        <TraceActivitySummary
+          lanes={group.lanes}
+          label={group.label}
+          onInspectEvents={onInspectEvents}
+        />
         <span
           className="font-mono text-[0.625rem] text-muted-foreground tabular-nums"
           title={
@@ -311,10 +317,6 @@ export function TraceTimeline({
                 onInspectEvents={onInspectEvents}
               />
             )
-          const requests = lane.events.filter(
-            (span) => span.kind === "request"
-          ).length
-          const tools = lane.events.length - requests
           const dense =
             !lane.agent && lane.events.length > DENSE_EVENT_THRESHOLD
           const buckets = dense ? buildActivityBuckets(lane.events, scale) : []
@@ -415,27 +417,20 @@ export function TraceTimeline({
                     </Badge>
                   ) : null}
                 </div>
-                {lane.events.length > 0 ? (
-                  <button
-                    type="button"
-                    className="w-full cursor-pointer text-left font-mono text-[0.625rem] text-muted-foreground tabular-nums hover:text-primary"
-                    aria-label={t.traceLaneEvents(laneName, lane.events.length)}
-                    onClick={inspectLane}
-                  >
-                    {t.activityBucket(requests, tools, 0)}
-                  </button>
-                ) : null}
-                {lane.agent ? (
-                  <span
-                    className="font-mono text-[0.625rem] text-muted-foreground tabular-nums"
-                    title={tokenShare ? t.traceTokenShare : undefined}
-                  >
-                    {tokens === null
-                      ? t.agentTokensUnavailable
-                      : t.tokenCount(format.compact(tokens), tokens)}
-                    {tokenShare ? ` · ${tokenShare}` : ""}
-                  </span>
-                ) : null}
+                <TraceActivitySummary
+                  lanes={[lane]}
+                  label={laneName}
+                  onInspectEvents={onInspectEvents}
+                />
+                <span
+                  className="font-mono text-[0.625rem] text-muted-foreground tabular-nums"
+                  title={tokenShare ? t.traceTokenShare : undefined}
+                >
+                  {tokens === null
+                    ? t.agentTokensUnavailable
+                    : t.tokenCount(format.compact(tokens), tokens)}
+                  {tokenShare ? ` · ${tokenShare}` : ""}
+                </span>
                 {lane.agent || laneCost > 0 ? (
                   <span
                     className="font-mono text-[0.625rem] text-muted-foreground tabular-nums"

@@ -152,6 +152,8 @@ export function getSessionTrace(
       durationMs,
       provider: row.provider == null ? null : String(row.provider),
       model: row.model_id == null ? null : String(row.model_id),
+      requestCount: included ? nullableNumber(row.request_count) : null,
+      toolCount: included ? nullableNumber(row.tool_count) : null,
       tokens: included ? nullableNumber(row.total_tokens) : null,
       cost: included ? nullableNumber(row.total_cost) : null,
       isError: String(row.status_canonical) === "failed",

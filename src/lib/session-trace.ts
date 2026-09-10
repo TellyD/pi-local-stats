@@ -127,6 +127,21 @@ export function layoutAgentGroup(lanes: TraceLane[], scale: TraceScale) {
     })
 }
 
+/** Reported totals and indexed events overlap: use their maximum, never their sum. */
+export function laneActivityCounts(lane: TraceLane) {
+  const requests = lane.events.filter((span) => span.kind === "request").length
+  const tools = lane.events.filter((span) => span.kind === "tool").length
+  const hasDetails = !lane.agent || lane.events.length > 0
+  return {
+    requests: hasDetails
+      ? Math.max(requests, lane.agent?.requestCount ?? 0)
+      : (lane.agent?.requestCount ?? null),
+    tools: hasDetails
+      ? Math.max(tools, lane.agent?.toolCount ?? 0)
+      : (lane.agent?.toolCount ?? null),
+  }
+}
+
 /** Match the trace's accounting sources, never add unassigned request copies. */
 export function laneTokens(lane: TraceLane): number | null {
   const values = [

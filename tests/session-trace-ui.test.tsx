@@ -10,6 +10,7 @@ import {
   groupTraceLanes,
   layoutAgentGroup,
   laneTokens,
+  laneActivityCounts,
 } from "../src/lib/session-trace.ts"
 import { SessionTrace } from "../src/components/dashboard/SessionTrace.tsx"
 import { I18nProvider } from "../src/lib/i18n.tsx"
@@ -347,6 +348,11 @@ describe("SessionTrace", () => {
         },
       ],
     })
+    const rootLane = markup.slice(
+      markup.indexOf('data-lane-id="root"'),
+      markup.indexOf('data-agent-group="worker"')
+    )
+    expect(rootLane).toContain("80 tokens · 40%")
     expect(markup).toContain("20 tokens · 10%")
     expect(markup).toContain("100 tokens · 50%")
     expect(markup).toContain(
@@ -371,6 +377,61 @@ describe("SessionTrace", () => {
       expect(markup).not.toContain("Infinity")
     }
   )
+
+  it("cumule les compteurs rapportés sans recompter les événements détaillés", () => {
+    const spans = [
+      { ...trace.spans[0]!, requestCount: 5, toolCount: 12 },
+      trace.spans[1]!,
+      trace.spans[2]!,
+      { ...trace.spans[0]!, id: "second", requestCount: 2, toolCount: 0 },
+    ]
+    const lanes = buildTraceLanes(spans)
+    expect(laneActivityCounts(lanes[0]!)).toEqual({ requests: 5, tools: 12 })
+    expect(
+      laneActivityCounts({
+        ...lanes[0]!,
+        agent: { ...lanes[0]!.agent!, requestCount: 0, toolCount: 0 },
+      })
+    ).toEqual({ requests: 1, tools: 1 })
+    const markup = renderTrace({ ...trace, spans })
+    expect(markup).toContain("7 requests · 12 tools")
+    expect(markup).toContain('aria-label="Inspect 2 events in worker"')
+    expect(markup).not.toContain("8 requests · 13 tools")
+    expect(
+      renderTrace({
+        ...trace,
+        spans: [...spans, { ...trace.spans[0]!, id: "unknown" }],
+      })
+    ).toContain("≥ 7 requests · ≥ 12 tools")
+  })
+
+  it("distingue les compteurs absents, nuls et partiellement connus", () => {
+    const agent = trace.spans[0]!
+    expect(laneActivityCounts(buildTraceLanes([agent])[0]!)).toEqual({
+      requests: null,
+      tools: null,
+    })
+    expect(renderTrace({ ...trace, spans: [agent] })).toContain(
+      "Requests unavailable · Tools unavailable"
+    )
+    expect(
+      renderTrace({
+        ...trace,
+        spans: [{ ...agent, requestCount: 0, toolCount: 0 }],
+      })
+    ).toContain("0 requests · 0 tools")
+    expect(
+      renderTrace({
+        ...trace,
+        spans: [{ ...agent, requestCount: 3, toolCount: null }],
+      })
+    ).toContain("3 requests · Tools unavailable")
+    expect(
+      laneActivityCounts(
+        buildTraceLanes([agent, trace.spans[1]!, trace.spans[2]!])[0]!
+      )
+    ).toEqual({ requests: 1, tools: 1 })
+  })
 
   it("regroupe toutes les exécutions d’un type sans masquer les agents suivants", () => {
     const manyAgents: SessionTraceResponse = {

@@ -585,6 +585,60 @@ describe("getSessions", () => {
 })
 
 describe("getSessionTrace", () => {
+  it.each([
+    { requestCount: 3, toolCount: 7 },
+    { requestCount: 0, toolCount: 0 },
+    { requestCount: null, toolCount: null },
+  ])(
+    "conserve les compteurs propres rapportés $requestCount/$toolCount",
+    (counts) => {
+      const db = createDatabase(":memory:")
+      const rootFile = "/sessions/counts.jsonl"
+      try {
+        db.prepare(
+          "INSERT INTO sessions (file_path, session_id, cwd, name, started_at, accounting_session_id) VALUES (?, 'counts', '/work/project', 'Counts', '2026-01-01T00:00:00.000Z', 'counts')"
+        ).run(rootFile)
+        const parent = normalizedObservation({
+          id: "parent",
+          sourcePath: rootFile,
+          rootId: "counts",
+          sourceEntryId: "parent",
+        })
+        Object.assign(parent.usage!, {
+          requestCount: 99,
+          toolCount: 99,
+          scope: "subtree",
+        })
+        const child = normalizedObservation({
+          id: "child",
+          sourcePath: rootFile,
+          rootId: "counts",
+          sourceEntryId: "child",
+          parentNativeId: "parent",
+        })
+        Object.assign(child.usage!, counts)
+        replaceAgentObservations(db, rootFile, [parent, child])
+        reconcileAgentRuns(db)
+
+        const trace = getSessionTrace(db, "counts", "/work/project")
+        expect(trace?.spans).toHaveLength(2)
+        expect(trace?.spans[0]).toMatchObject({
+          kind: "agent",
+          includedInSessionTotal: false,
+          requestCount: null,
+          toolCount: null,
+        })
+        expect(trace?.spans[1]).toMatchObject({
+          kind: "agent",
+          includedInSessionTotal: true,
+          ...counts,
+        })
+      } finally {
+        db.close()
+      }
+    }
+  )
+
   it("ordonne la trace, déduplique les événements et conserve les timings inconnus", () => {
     const db = createDatabase(":memory:")
     const rootFile = "/sessions/trace.jsonl"
@@ -614,6 +668,7 @@ describe("getSessionTrace", () => {
       completedAt: "2026-01-01T00:00:04.000Z",
     })
     parent.displayName = "parent"
+    Object.assign(parent.usage!, { requestCount: 12, toolCount: 34 })
     child.displayName = "child"
     child.sessionFile = childFile
     const untimed = normalizedObservation({
@@ -759,7 +814,14 @@ describe("getSessionTrace", () => {
     ])
     for (const span of trace!.spans.filter((span) => span.kind !== "agent")) {
       expect(span).not.toHaveProperty("agentType")
+      expect(span).not.toHaveProperty("requestCount")
+      expect(span).not.toHaveProperty("toolCount")
     }
+    expect(trace?.spans.find((span) => span.label === "parent")).toMatchObject({
+      includedInSessionTotal: false,
+      requestCount: null,
+      toolCount: null,
+    })
     expect(trace?.spans.find((span) => span.label === "untimed")).toMatchObject(
       { startedAt: null, durationMs: null }
     )

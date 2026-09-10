@@ -144,6 +144,24 @@ const english = {
   traceScrollableTimeline: "Scrollable timeline",
   traceActivityLeft: "← Activity offscreen",
   traceActivityRight: "Activity offscreen →",
+  traceActivityCounts: (
+    requests: number | null,
+    tools: number | null,
+    partialRequests: boolean,
+    partialTools: boolean
+  ) => {
+    const requestLabel =
+      requests === null
+        ? "Requests unavailable"
+        : `${partialRequests ? "≥ " : ""}${requests} ${requests === 1 ? "request" : "requests"}`
+    const toolLabel =
+      tools === null
+        ? "Tools unavailable"
+        : `${partialTools ? "≥ " : ""}${tools} ${tools === 1 ? "tool" : "tools"}`
+    return `${requestLabel} · ${toolLabel}`
+  },
+  traceActivityCountsDetail:
+    "Recorded requests and tools. ≥ indicates incomplete totals; reported activity may not have event details.",
   traceLaneEvents: (label: string, count: number) =>
     `Inspect ${count} events in ${label}`,
   traceTokenShare:
@@ -361,6 +379,19 @@ const french: Messages = {
   traceScrollableTimeline: "Chronologie défilante",
   traceActivityLeft: "← Activité hors champ",
   traceActivityRight: "Activité hors champ →",
+  traceActivityCounts: (requests, tools, partialRequests, partialTools) => {
+    const requestLabel =
+      requests === null
+        ? "Requêtes indisponibles"
+        : `${partialRequests ? "≥ " : ""}${requests} requête${requests === 1 ? "" : "s"}`
+    const toolLabel =
+      tools === null
+        ? "Outils indisponibles"
+        : `${partialTools ? "≥ " : ""}${tools} outil${tools === 1 ? "" : "s"}`
+    return `${requestLabel} · ${toolLabel}`
+  },
+  traceActivityCountsDetail:
+    "Requêtes et outils enregistrés. ≥ indique un total incomplet ; les activités rapportées n’ont pas toujours d’événements détaillés.",
   traceLaneEvents: (label, count) =>
     `Consulter ${count} événements de ${label}`,
   traceTokenShare:
